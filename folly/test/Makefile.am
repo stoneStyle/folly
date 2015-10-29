@@ -2,7 +2,7 @@ SUBDIRS = . function_benchmark
 
 ACLOCAL_AMFLAGS = -I m4
 
-CPPFLAGS += -Igtest-1.6.0/include
+CPPFLAGS += -Igtest-1.7.0/include
 
 TESTS= \
 	sorted_vector_types_test \
@@ -17,11 +17,11 @@ TESTS= \
 check_LTLIBRARIES = libgtestmain.la libgtest.la
 check_PROGRAMS =
 
-libgtestmain_la_CPPFLAGS = -Igtest-1.6.0 -Igtest-1.6.0/src
-libgtestmain_la_SOURCES = gtest-1.6.0/src/gtest-all.cc gtest-1.6.0/src/gtest_main.cc
+libgtestmain_la_CPPFLAGS = -Igtest-1.7.0 -Igtest-1.7.0/src
+libgtestmain_la_SOURCES = gtest-1.7.0/src/gtest-all.cc gtest-1.7.0/src/gtest_main.cc
 
-libgtest_la_CPPFLAGS = -Igtest-1.6.0 -Igtest-1.6.0/src
-libgtest_la_SOURCES = gtest-1.6.0/src/gtest-all.cc
+libgtest_la_CPPFLAGS = -Igtest-1.7.0 -Igtest-1.7.0/src
+libgtest_la_SOURCES = gtest-1.7.0/src/gtest-all.cc
 
 noinst_HEADERS = FBStringTestBenchmarks.cpp.h \
 		 FBVectorTestBenchmarks.cpp.h
@@ -47,6 +47,10 @@ TESTS += small_vector_test
 discriminated_ptr_test_SOURCES = DiscriminatedPtrTest.cpp
 discriminated_ptr_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
 TESTS += discriminated_ptr_test
+
+cpuid_test_SOURCES = CpuIdTest.cpp
+cpuid_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
+TESTS += cpuid_test
 endif
 
 sorted_vector_types_test_SOURCES = sorted_vector_test.cpp
@@ -127,7 +131,7 @@ concurrent_skiplist_test_LDADD = libgtest.la $(top_builddir)/libfolly.la
 TESTS += concurrent_skiplist_test
 
 concurrent_skiplist_benchmark_SOURCES = ConcurrentSkipListBenchmark.cpp
-concurrent_skiplist_benchmark_LDADD = $(top_builddir)/libfollybenchmark.la $(top_builddir)/libfolly.la
+concurrent_skiplist_benchmark_LDADD = libgtestmain.la $(top_builddir)/libfollybenchmark.la $(top_builddir)/libfolly.la
 check_PROGRAMS += concurrent_skiplist_benchmark
 
 histogram_test_SOURCES = HistogramTest.cpp
@@ -170,16 +174,12 @@ portability_test_SOURCES = PortabilityTest.cpp
 portability_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
 TESTS += portability_test
 
-cpuid_test_SOURCES = CpuIdTest.cpp
-cpuid_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la
-TESTS += cpuid_test
-
 spooky_hash_v1_test_SOURCES = SpookyHashV1Test.cpp
-spooky_hash_v1_test_LDADD = $(top_builddir)/libfolly.la $(top_builddir)/libfollybenchmark.la
+spooky_hash_v1_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la $(top_builddir)/libfollybenchmark.la
 TESTS += spooky_hash_v1_test
 
 spooky_hash_v2_test_SOURCES = SpookyHashV2Test.cpp
-spooky_hash_v2_test_LDADD = $(top_builddir)/libfolly.la $(top_builddir)/libfollybenchmark.la
+spooky_hash_v2_test_LDADD = libgtestmain.la $(top_builddir)/libfolly.la $(top_builddir)/libfollybenchmark.la
 TESTS += spooky_hash_v2_test
 
 check_PROGRAMS += $(TESTS)

@@ -26,6 +26,7 @@ nobase_follyinclude_HEADERS = \
 	AtomicHashArray-inl.h \
 	AtomicHashMap.h \
 	AtomicHashMap-inl.h \
+	AtomicLinkedList.h \
 	AtomicStruct.h \
 	Baton.h \
 	Benchmark.h \
@@ -68,11 +69,45 @@ nobase_follyinclude_HEADERS = \
 	ExceptionWrapper.h \
 	Executor.h \
 	EvictingCacheMap.h \
+	experimental/AutoTimer.h \
 	experimental/Bits.h \
 	experimental/EliasFanoCoding.h \
 	experimental/EventCount.h \
+	experimental/fibers/AddTasks.h \
+	experimental/fibers/AddTasks-inl.h \
+	experimental/fibers/Baton.h \
+	experimental/fibers/Baton-inl.h \
+	experimental/fibers/BoostContextCompatibility.h \
+	experimental/fibers/EventBaseLoopController.h \
+	experimental/fibers/EventBaseLoopController-inl.h \
+	experimental/fibers/ExecutionObserver.h \
+	experimental/fibers/Fiber.h \
+	experimental/fibers/Fiber-inl.h \
+	experimental/fibers/FiberIOExecutor.h \
+	experimental/fibers/FiberManager.h \
+	experimental/fibers/FiberManager-inl.h \
+	experimental/fibers/FiberManagerMap.h \
+	experimental/fibers/ForEach.h \
+	experimental/fibers/ForEach-inl.h \
+	experimental/fibers/GenericBaton.h \
+	experimental/fibers/GuardPageAllocator.h \
+	experimental/fibers/GuardPageAllocator-inl.h \
+	experimental/fibers/LoopController.h \
+	experimental/fibers/Promise.h \
+	experimental/fibers/Promise-inl.h \
+	experimental/fibers/SimpleLoopController.h \
+	experimental/fibers/TimeoutController.h \
+	experimental/fibers/traits.h \
+	experimental/fibers/WhenN.h \
+	experimental/fibers/WhenN-inl.h \
+	experimental/FunctionScheduler.h \
 	experimental/io/FsUtil.h \
-	experimental/Singleton.h \
+	experimental/JSONSchema.h \
+	experimental/Select64.h \
+	experimental/SharedMutex.h \
+	experimental/StringKeyedCommon.h \
+	experimental/StringKeyedUnorderedMap.h \
+	experimental/StringKeyedUnorderedSet.h \
 	experimental/TestUtil.h \
 	FBString.h \
 	FBVector.h \
@@ -84,6 +119,28 @@ nobase_follyinclude_HEADERS = \
 	FormatArg.h \
 	Format.h \
 	Format-inl.h \
+	futures/Deprecated.h \
+	futures/DrivableExecutor.h \
+	futures/Future-pre.h \
+	futures/helpers.h \
+	futures/Future.h \
+	futures/Future-inl.h \
+	futures/FutureException.h \
+	futures/InlineExecutor.h \
+	futures/ManualExecutor.h \
+	futures/OpaqueCallbackShunt.h \
+	futures/Promise-inl.h \
+	futures/Promise.h \
+	futures/QueuedImmediateExecutor.h \
+	futures/ScheduledExecutor.h \
+	futures/Timekeeper.h \
+	futures/Try-inl.h \
+	futures/Try.h \
+	futures/Unit.h \
+	futures/detail/Core.h \
+	futures/detail/FSM.h \
+	futures/detail/ThreadWheelTimekeeper.h \
+	futures/detail/Types.h \
 	gen/Base.h \
 	gen/Base-inl.h \
 	gen/Combine.h \
@@ -119,8 +176,9 @@ nobase_follyinclude_HEADERS = \
 	io/async/AsyncUDPServerSocket.h \
 	io/async/AsyncUDPSocket.h \
 	io/async/AsyncServerSocket.h \
-	io/async/AsyncSSLServerSocket.h \
+	io/async/AsyncSignalHandler.h \
 	io/async/AsyncSocket.h \
+	io/async/AsyncSocketBase.h \
 	io/async/AsyncSSLSocket.h \
 	io/async/AsyncSocketException.h \
 	io/async/DelayedDestruction.h \
@@ -134,6 +192,12 @@ nobase_follyinclude_HEADERS = \
 	io/async/Request.h \
 	io/async/SSLContext.h \
 	io/async/TimeoutManager.h \
+	io/async/test/AsyncSSLSocketTest.h \
+	io/async/test/BlockingSocket.h \
+	io/async/test/MockAsyncSocket.h \
+	io/async/test/MockAsyncServerSocket.h \
+	io/async/test/MockAsyncSSLSocket.h \
+	io/async/test/MockAsyncTransport.h \
 	io/async/test/TimeUtil.h \
 	io/async/test/UndelayedDestruction.h \
 	io/async/test/Util.h \
@@ -161,6 +225,8 @@ nobase_follyinclude_HEADERS = \
 	Range.h \
 	RWSpinLock.h \
 	ScopeGuard.h \
+	Singleton.h \
+	Singleton-inl.h \
 	SmallLocks.h \
 	small_vector.h \
 	SocketAddress.h \
@@ -205,11 +271,19 @@ nobase_follyinclude_HEADERS = \
 	wangle/acceptor/ServerSocketConfig.h \
 	wangle/acceptor/SocketOptions.h \
 	wangle/acceptor/TransportInfo.h \
+	wangle/bootstrap/ServerBootstrap.h \
+	wangle/bootstrap/ServerBootstrap-inl.h \
+	wangle/bootstrap/ServerSocketFactory.h \
+	wangle/bootstrap/ClientBootstrap.h \
 	wangle/channel/AsyncSocketHandler.h \
-	wangle/channel/ChannelHandler.h \
-	wangle/channel/ChannelHandlerContext.h \
-	wangle/channel/ChannelPipeline.h \
+	wangle/channel/EventBaseHandler.h \
+	wangle/channel/Handler.h \
+	wangle/channel/HandlerContext.h \
+	wangle/channel/HandlerContext-inl.h \
 	wangle/channel/OutputBufferingHandler.h \
+	wangle/channel/Pipeline.h \
+	wangle/channel/Pipeline-inl.h \
+	wangle/channel/StaticPipeline.h \
 	wangle/concurrent/BlockingQueue.h \
 	wangle/concurrent/Codel.h \
 	wangle/concurrent/CPUThreadPoolExecutor.h \
@@ -221,24 +295,6 @@ nobase_follyinclude_HEADERS = \
 	wangle/concurrent/NamedThreadFactory.h \
 	wangle/concurrent/ThreadFactory.h \
 	wangle/concurrent/ThreadPoolExecutor.h \
-	wangle/futures/Deprecated.h \
-	wangle/futures/Future-inl.h \
-	wangle/futures/Future.h \
-	wangle/futures/InlineExecutor.h \
-	wangle/futures/ManualExecutor.h \
-	wangle/futures/OpaqueCallbackShunt.h \
-	wangle/futures/Promise-inl.h \
-	wangle/futures/Promise.h \
-	wangle/futures/QueuedImmediateExecutor.h \
-	wangle/futures/ScheduledExecutor.h \
-	wangle/futures/Timekeeper.h \
-	wangle/futures/Try-inl.h \
-	wangle/futures/Try.h \
-	wangle/futures/WangleException.h \
-	wangle/futures/detail/Core.h \
-	wangle/futures/detail/FSM.h \
-	wangle/futures/detail/ThreadWheelTimekeeper.h \
-	wangle/futures/detail/Types.h \
 	wangle/rx/Observable.h \
 	wangle/rx/Observer.h \
 	wangle/rx/Subject.h \
@@ -287,6 +343,11 @@ libfolly_la_SOURCES = \
 	File.cpp \
 	FileUtil.cpp \
 	FingerprintTables.cpp \
+	futures/detail/ThreadWheelTimekeeper.cpp \
+	futures/Future.cpp \
+	futures/InlineExecutor.cpp \
+	futures/ManualExecutor.cpp \
+	futures/QueuedImmediateExecutor.cpp \
 	detail/Futex.cpp \
 	GroupVarint.cpp \
 	GroupVarintTables.cpp \
@@ -302,7 +363,7 @@ libfolly_la_SOURCES = \
 	io/async/AsyncTimeout.cpp \
 	io/async/AsyncUDPSocket.cpp \
 	io/async/AsyncServerSocket.cpp \
-	io/async/AsyncSSLServerSocket.cpp \
+	io/async/AsyncSignalHandler.cpp \
 	io/async/AsyncSocket.cpp \
 	io/async/AsyncSSLSocket.cpp \
 	io/async/EventBase.cpp \
@@ -319,6 +380,7 @@ libfolly_la_SOURCES = \
 	Random.cpp \
 	SafeAssert.cpp \
 	SocketAddress.cpp \
+	Singleton.cpp \
 	SpookyHashV1.cpp \
 	SpookyHashV2.cpp \
 	stats/Instantiations.cpp \
@@ -327,8 +389,16 @@ libfolly_la_SOURCES = \
 	TimeoutQueue.cpp \
 	Uri.cpp \
 	Version.cpp \
+	experimental/fibers/Baton.cpp \
+	experimental/fibers/Fiber.cpp \
+	experimental/fibers/FiberManager.cpp \
+	experimental/fibers/FiberManagerMap.cpp \
+	experimental/fibers/TimeoutController.cpp \
+	experimental/FunctionScheduler.cpp \
 	experimental/io/FsUtil.cpp \
-	experimental/Singleton.cpp \
+	experimental/JSONSchema.cpp \
+	experimental/Select64.cpp \
+	experimental/SharedMutex.cpp \
 	experimental/TestUtil.cpp \
 	wangle/acceptor/Acceptor.cpp \
 	wangle/acceptor/ConnectionManager.cpp \
@@ -336,17 +406,12 @@ libfolly_la_SOURCES = \
 	wangle/acceptor/ManagedConnection.cpp \
 	wangle/acceptor/SocketOptions.cpp \
 	wangle/acceptor/TransportInfo.cpp \
+	wangle/bootstrap/ServerBootstrap.cpp \
 	wangle/concurrent/CPUThreadPoolExecutor.cpp \
 	wangle/concurrent/Codel.cpp \
-	wangle/concurrent/IOExecutor.cpp \
 	wangle/concurrent/IOThreadPoolExecutor.cpp \
 	wangle/concurrent/GlobalExecutor.cpp \
 	wangle/concurrent/ThreadPoolExecutor.cpp \
-	wangle/futures/detail/ThreadWheelTimekeeper.cpp \
-	wangle/futures/Future.cpp \
-	wangle/futures/InlineExecutor.cpp \
-	wangle/futures/ManualExecutor.cpp \
-	wangle/futures/QueuedImmediateExecutor.cpp \
 	wangle/ssl/PasswordInFile.cpp \
 	wangle/ssl/SSLContextManager.cpp \
 	wangle/ssl/SSLSessionCacheManager.cpp \

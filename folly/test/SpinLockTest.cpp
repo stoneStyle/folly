@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -60,7 +60,7 @@ struct TryLockState {
 };
 
 template <typename LOCK>
-void trylockTestThread(TryLockState<LOCK>* state, int count) {
+void trylockTestThread(TryLockState<LOCK>* state, size_t count) {
   while (true) {
     asm("pause");
     SpinLockGuardImpl<LOCK> g(state->lock1);
@@ -111,7 +111,7 @@ void trylockTest() {
   int nthrs = sysconf(_SC_NPROCESSORS_ONLN) + 4;
   std::vector<std::thread> threads;
   TryLockState<LOCK> state;
-  int count = 100;
+  size_t count = 100;
   for (int i = 0; i < nthrs; ++i) {
     threads.push_back(std::thread(trylockTestThread<LOCK>, &state, count));
   }
@@ -146,7 +146,7 @@ TEST(SpinLock, AppleTryLock) {
 }
 #endif
 
-#if !__ANDROID__
+#if FOLLY_HAVE_PTHREAD_SPINLOCK_T
 TEST(SpinLock, PthreadCorrectness) {
   correctnessTest<folly::SpinLockPthreadImpl>();
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -81,6 +81,10 @@ class IPAddressV6 : boost::totally_ordered<IPAddressV6> {
   static const uint32_t PREFIX_TEREDO;
   // Binary prefix for 6to4 networks
   static const uint32_t PREFIX_6TO4;
+
+  // Size of std::string returned by toFullyQualified.
+  static constexpr size_t kToFullyQualifiedSize =
+    8 /*words*/ * 4 /*hex chars per word*/ + 7 /*separators*/;
 
   /**
    * Create a new IPAddress instance from the provided binary data.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -62,6 +62,18 @@ TEST(AsyncSocketTest, REUSEPORT) {
   serverSocket2->listen(0);
   serverSocket2->startAccepting();
 
+}
+
+TEST(AsyncSocketTest, v4v6samePort) {
+  EventBase base;
+  auto serverSocket = AsyncServerSocket::newSocket(&base);
+  serverSocket->bind(0);
+  auto addrs = serverSocket->getAddresses();
+  ASSERT_GT(addrs.size(), 0);
+  uint16_t port = addrs[0].getPort();
+  for (const auto& addr : addrs) {
+    EXPECT_EQ(port, addr.getPort());
+  }
 }
 
 } // namespace

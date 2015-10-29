@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,13 +40,8 @@ namespace folly { namespace wangle {
 // IOThreadPoolExecutor will be created and returned.
 class IOExecutor : public virtual Executor {
  public:
-  virtual ~IOExecutor();
+  virtual ~IOExecutor() {}
   virtual EventBase* getEventBase() = 0;
-
- private:
-  static std::atomic<IOExecutor*>* getSingleton();
-  friend IOExecutor* getIOExecutor();
-  friend void setIOExecutor(IOExecutor* executor);
 };
 
 }}

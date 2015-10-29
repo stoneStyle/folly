@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -263,16 +263,16 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   // See the documentation in TAsyncTransport.h
   // TODO: implement graceful shutdown in close()
   // TODO: implement detachSSL() that returns the SSL connection
-  virtual void closeNow();
-  virtual void shutdownWrite();
-  virtual void shutdownWriteNow();
-  virtual bool good() const;
-  virtual bool connecting() const;
+  virtual void closeNow() override;
+  virtual void shutdownWrite() override;
+  virtual void shutdownWriteNow() override;
+  virtual bool good() const override;
+  virtual bool connecting() const override;
 
   bool isEorTrackingEnabled() const override;
-  virtual void setEorTracking(bool track);
-  virtual size_t getRawBytesWritten() const;
-  virtual size_t getRawBytesReceived() const;
+  virtual void setEorTracking(bool track) override;
+  virtual size_t getRawBytesWritten() const override;
+  virtual size_t getRawBytesReceived() const override;
   void enableClientHelloParsing();
 
   /**
@@ -308,8 +308,8 @@ class AsyncSSLSocket : public virtual AsyncSocket {
                const folly::SocketAddress& address,
                int timeout = 0,
                const OptionMap &options = emptyOptionMap,
-               const folly::SocketAddress& bindAddr = anyAddress)
-               noexcept;
+               const folly::SocketAddress& bindAddr = anyAddress())
+               noexcept override;
 
   using AsyncSocket::connect;
 
@@ -469,12 +469,12 @@ class AsyncSSLSocket : public virtual AsyncSocket {
     return 0;
   }
 
-  virtual void attachEventBase(EventBase* eventBase) {
+  virtual void attachEventBase(EventBase* eventBase) override {
     AsyncSocket::attachEventBase(eventBase);
     handshakeTimeout_.attachEventBase(eventBase);
   }
 
-  virtual void detachEventBase() {
+  virtual void detachEventBase() override {
     AsyncSocket::detachEventBase();
     handshakeTimeout_.detachEventBase();
   }
@@ -640,6 +640,18 @@ class AsyncSSLSocket : public virtual AsyncSocket {
     return clientHelloInfo_.get();
   }
 
+  void setMinWriteSize(size_t minWriteSize) {
+    minWriteSize_ = minWriteSize;
+  }
+
+  size_t getMinWriteSize() {
+    return minWriteSize_;
+  }
+
+ private:
+
+  void init();
+
  protected:
 
   /**
@@ -654,21 +666,22 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   // Inherit event notification methods from AsyncSocket except
   // the following.
 
-  void handleRead() noexcept;
-  void handleWrite() noexcept;
+  void handleRead() noexcept override;
+  void handleWrite() noexcept override;
   void handleAccept() noexcept;
-  void handleConnect() noexcept;
+  void handleConnect() noexcept override;
 
   void invalidState(HandshakeCB* callback);
   bool willBlock(int ret, int *errorOut) noexcept;
 
-  virtual void checkForImmediateRead() noexcept;
+  virtual void checkForImmediateRead() noexcept override;
   // AsyncSocket calls this at the wrong time for SSL
-  void handleInitialReadWrite() noexcept {}
+  void handleInitialReadWrite() noexcept override {}
 
-  ssize_t performRead(void* buf, size_t buflen);
+  ssize_t performRead(void* buf, size_t buflen) override;
   ssize_t performWrite(const iovec* vec, uint32_t count, WriteFlags flags,
-                       uint32_t* countWritten, uint32_t* partialWritten);
+                       uint32_t* countWritten, uint32_t* partialWritten)
+    override;
 
   // This virtual wrapper around SSL_write exists solely for testing/mockability
   virtual int sslWriteImpl(SSL *ssl, const void *buf, int n) {
@@ -728,6 +741,10 @@ class AsyncSSLSocket : public virtual AsyncSocket {
   // The app byte num that we are tracking for the MSG_EOR
   // Only one app EOR byte can be tracked.
   size_t appEorByteNo_{0};
+
+  // Try to avoid calling SSL_write() for buffers smaller than this.
+  // It doesn't take effect when it is 0.
+  size_t minWriteSize_{1500};
 
   // When openssl is about to sendmsg() across the minEorRawBytesNo_,
   // it will pass MSG_EOR to sendmsg().

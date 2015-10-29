@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-#include <folly/wangle/channel/ChannelPipeline.h>
+#include <folly/wangle/channel/StaticPipeline.h>
 #include <folly/wangle/channel/OutputBufferingHandler.h>
-#include <folly/wangle/channel/test/MockChannelHandler.h>
+#include <folly/wangle/channel/test/MockHandler.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -25,18 +25,18 @@ using namespace folly;
 using namespace folly::wangle;
 using namespace testing;
 
-typedef StrictMock<MockChannelHandlerAdapter<
+typedef StrictMock<MockHandlerAdapter<
   IOBufQueue&,
   std::unique_ptr<IOBuf>>>
-MockHandler;
+MockBytesHandler;
 
 MATCHER_P(IOBufContains, str, "") { return arg->moveToFbString() == str; }
 
 TEST(OutputBufferingHandlerTest, Basic) {
-  MockHandler mockHandler;
+  MockBytesHandler mockHandler;
   EXPECT_CALL(mockHandler, attachPipeline(_));
-  ChannelPipeline<IOBufQueue&, std::unique_ptr<IOBuf>,
-    ChannelHandlerPtr<MockHandler, false>,
+  StaticPipeline<IOBufQueue&, std::unique_ptr<IOBuf>,
+    MockBytesHandler,
     OutputBufferingHandler>
   pipeline(&mockHandler, OutputBufferingHandler{});
 

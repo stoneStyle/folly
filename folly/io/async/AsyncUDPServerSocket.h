@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -36,7 +36,8 @@ namespace folly {
  *       more than 1 packet will not work because they will end up with
  *       different event base to process.
  */
-class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
+class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback
+                           , public AsyncSocketBase {
  public:
   class Callback {
    public:
@@ -55,9 +56,11 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
     /**
      * Invoked when a new packet is received
      */
-    virtual void onDataAvailable(const folly::SocketAddress& addr,
-                                 std::unique_ptr<folly::IOBuf> buf,
-                                 bool truncated) noexcept = 0;
+    virtual void onDataAvailable(
+      std::shared_ptr<AsyncUDPSocket> socket,
+      const folly::SocketAddress& addr,
+      std::unique_ptr<folly::IOBuf> buf,
+      bool truncated) noexcept = 0;
 
     virtual ~Callback() {}
   };
@@ -81,16 +84,25 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
     }
   }
 
-  void bind(const folly::SocketAddress& address) {
+  void bind(const folly::SocketAddress& addy) {
     CHECK(!socket_);
 
-    socket_ = folly::make_unique<AsyncUDPSocket>(evb_);
-    socket_->bind(address);
+    socket_ = std::make_shared<AsyncUDPSocket>(evb_);
+    socket_->setReusePort(reusePort_);
+    socket_->bind(addy);
+  }
+
+  void setReusePort(bool reusePort) {
+    reusePort_ = reusePort;
   }
 
   folly::SocketAddress address() const {
     CHECK(socket_);
     return socket_->address();
+  }
+
+  void getAddress(SocketAddress* a) const {
+    *a = address();
   }
 
   /**
@@ -114,14 +126,19 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
     socket_->resumeRead(this);
   }
 
-  int getFD() {
+  int getFD() const {
     CHECK(socket_) << "Need to bind before getting FD";
     return socket_->getFD();
   }
 
   void close() {
     CHECK(socket_) << "Need to bind before closing";
+    socket_->close();
     socket_.reset();
+  }
+
+  EventBase* getEventBase() const {
+    return evb_;
   }
 
  private:
@@ -151,11 +168,12 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
     auto mvp =
         folly::MoveWrapper<
             std::unique_ptr<folly::IOBuf>>(std::move(data));
+    auto socket = socket_;
 
     // Schedule it in the listener's eventbase
     // XXX: Speed this up
-    std::function<void()> f = [client, callback, mvp, truncated] () mutable {
-      callback->onDataAvailable(client, std::move(*mvp), truncated);
+    std::function<void()> f = [socket, client, callback, mvp, truncated] () mutable {
+      callback->onDataAvailable(socket, client, std::move(*mvp), truncated);
     };
 
     listeners_[nextListener_].first->runInEventBaseThread(f);
@@ -182,7 +200,7 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
   EventBase* const evb_;
   const size_t packetSize_;
 
-  std::unique_ptr<AsyncUDPSocket> socket_;
+  std::shared_ptr<AsyncUDPSocket> socket_;
 
   // List of listener to distribute packets among
   typedef std::pair<EventBase*, Callback*> Listener;
@@ -193,6 +211,8 @@ class AsyncUDPServerSocket : private AsyncUDPSocket::ReadCallback {
 
   // Temporary buffer for data
   folly::IOBufQueue buf_;
+
+  bool reusePort_{false};
 };
 
 } // Namespace

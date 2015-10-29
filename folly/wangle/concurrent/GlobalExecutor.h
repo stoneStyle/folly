@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,31 @@
 
 #pragma once
 
+#include <memory>
+
+#include <folly/Executor.h>
+#include <folly/wangle/concurrent/IOExecutor.h>
+
 namespace folly { namespace wangle {
 
-class IOExecutor;
+// Retrieve the global Executor. If there is none, a default InlineExecutor
+// will be constructed and returned. This is named CPUExecutor to distinguish
+// it from IOExecutor below and to hint that it's intended for CPU-bound tasks.
+std::shared_ptr<Executor> getCPUExecutor();
+
+// Set an Executor to be the global Executor which will be returned by
+// subsequent calls to getCPUExecutor(). Takes a non-owning (weak) reference.
+void setCPUExecutor(std::shared_ptr<Executor> executor);
 
 // Retrieve the global IOExecutor. If there is none, a default
 // IOThreadPoolExecutor will be constructed and returned.
-IOExecutor* getIOExecutor();
+//
+// IOExecutors differ from Executors in that they drive and provide access to
+// one or more EventBases.
+std::shared_ptr<IOExecutor> getIOExecutor();
 
 // Set an IOExecutor to be the global IOExecutor which will be returned by
-// subsequent calls to getIOExecutor(). IOExecutors will uninstall themselves
-// as global when they are destructed.
-void setIOExecutor(IOExecutor* executor);
+// subsequent calls to getIOExecutor(). Takes a non-owning (weak) reference.
+void setIOExecutor(std::shared_ptr<IOExecutor> executor);
 
 }}

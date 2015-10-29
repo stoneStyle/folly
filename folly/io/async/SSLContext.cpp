@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -40,17 +40,10 @@ std::mutex    SSLContext::mutex_;
 int SSLContext::sNextProtocolsExDataIndex_ = -1;
 #endif
 
-#ifndef SSLCONTEXT_NO_REFCOUNT
-uint64_t SSLContext::count_ = 0;
-#endif
-
 // SSLContext implementation
 SSLContext::SSLContext(SSLVersion version) {
   {
     std::lock_guard<std::mutex> g(mutex_);
-#ifndef SSLCONTEXT_NO_REFCOUNT
-    count_++;
-#endif
     initializeOpenSSLLocked();
   }
 
@@ -92,15 +85,6 @@ SSLContext::~SSLContext() {
 
 #ifdef OPENSSL_NPN_NEGOTIATED
   deleteNextProtocolsStrings();
-#endif
-
-#ifndef SSLCONTEXT_NO_REFCOUNT
-  {
-    std::lock_guard<std::mutex> g(mutex_);
-    if (!--count_) {
-      cleanupOpenSSLLocked();
-    }
-  }
 #endif
 }
 
@@ -419,6 +403,96 @@ int SSLContext::advertisedNextProtocolCallback(SSL* ssl,
   return SSL_TLSEXT_ERR_OK;
 }
 
+#if defined(SSL_MODE_HANDSHAKE_CUTTHROUGH) && \
+  FOLLY_SSLCONTEXT_USE_TLS_FALSE_START
+SSLContext::SSLFalseStartChecker::SSLFalseStartChecker() :
+  /**
+   * The list was generated as follows:
+   * grep "_CK_" openssl-1.0.1e/ssl/s3_lib.c -A 4 |
+   * while read A && read B && read C && read D && read E && read F; do
+   * echo $A $B $C $D $E; done |
+   * grep "\(SSL_kDHr\|SSL_kDHd\|SSL_kEDH\|SSL_kECDHr\|
+   *         SSL_kECDHe\|SSL_kEECDH\)" | grep -v SSL_aNULL | grep SSL_AES |
+   * awk -F, '{ print $1"," }'
+   */
+  ciphers_{
+    TLS1_CK_DH_DSS_WITH_AES_128_SHA,
+    TLS1_CK_DH_RSA_WITH_AES_128_SHA,
+    TLS1_CK_DHE_DSS_WITH_AES_128_SHA,
+    TLS1_CK_DHE_RSA_WITH_AES_128_SHA,
+    TLS1_CK_DH_DSS_WITH_AES_256_SHA,
+    TLS1_CK_DH_RSA_WITH_AES_256_SHA,
+    TLS1_CK_DHE_DSS_WITH_AES_256_SHA,
+    TLS1_CK_DHE_RSA_WITH_AES_256_SHA,
+    TLS1_CK_DH_DSS_WITH_AES_128_SHA256,
+    TLS1_CK_DH_RSA_WITH_AES_128_SHA256,
+    TLS1_CK_DHE_DSS_WITH_AES_128_SHA256,
+    TLS1_CK_DHE_RSA_WITH_AES_128_SHA256,
+    TLS1_CK_DH_DSS_WITH_AES_256_SHA256,
+    TLS1_CK_DH_RSA_WITH_AES_256_SHA256,
+    TLS1_CK_DHE_DSS_WITH_AES_256_SHA256,
+    TLS1_CK_DHE_RSA_WITH_AES_256_SHA256,
+    TLS1_CK_DHE_RSA_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_DHE_RSA_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_DH_RSA_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_DH_RSA_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_DHE_DSS_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_DHE_DSS_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_DH_DSS_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_DH_DSS_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_128_CBC_SHA,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_256_CBC_SHA,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_128_CBC_SHA,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_256_CBC_SHA,
+    TLS1_CK_ECDH_RSA_WITH_AES_128_CBC_SHA,
+    TLS1_CK_ECDH_RSA_WITH_AES_256_CBC_SHA,
+    TLS1_CK_ECDHE_RSA_WITH_AES_128_CBC_SHA,
+    TLS1_CK_ECDHE_RSA_WITH_AES_256_CBC_SHA,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_128_SHA256,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_256_SHA384,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_128_SHA256,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_256_SHA384,
+    TLS1_CK_ECDHE_RSA_WITH_AES_128_SHA256,
+    TLS1_CK_ECDHE_RSA_WITH_AES_256_SHA384,
+    TLS1_CK_ECDH_RSA_WITH_AES_128_SHA256,
+    TLS1_CK_ECDH_RSA_WITH_AES_256_SHA384,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_ECDH_ECDSA_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_ECDHE_RSA_WITH_AES_128_GCM_SHA256,
+    TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384,
+    TLS1_CK_ECDH_RSA_WITH_AES_128_GCM_SHA256,
+  } {
+  length_ = sizeof(ciphers_)/sizeof(ciphers_[0]);
+  width_ = sizeof(ciphers_[0]);
+  qsort(ciphers_, length_, width_, compare_ulong);
+}
+
+bool SSLContext::SSLFalseStartChecker::canUseFalseStartWithCipher(
+  const SSL_CIPHER *cipher) {
+  unsigned long cid = cipher->id;
+  unsigned long *r =
+    (unsigned long*)bsearch(&cid, ciphers_, length_, width_, compare_ulong);
+  return r != nullptr;
+}
+
+int
+SSLContext::SSLFalseStartChecker::compare_ulong(const void *x, const void *y) {
+  if (*(unsigned long *)x < *(unsigned long *)y) {
+    return -1;
+  }
+  if (*(unsigned long *)x > *(unsigned long *)y) {
+    return 1;
+  }
+  return 0;
+};
+
+bool SSLContext::canUseFalseStartWithCipher(const SSL_CIPHER *cipher) {
+  return falseStartChecker_.canUseFalseStartWithCipher(cipher);
+}
+#endif
+
 int SSLContext::selectNextProtocolCallback(
   SSL* ssl, unsigned char **out, unsigned char *outlen,
   const unsigned char *server, unsigned int server_len, void *data) {
@@ -444,6 +518,14 @@ int SSLContext::selectNextProtocolCallback(
   if (retval != OPENSSL_NPN_NEGOTIATED) {
     VLOG(3) << "SSLContext::selectNextProcolCallback() "
             << "unable to pick a next protocol.";
+#if defined(SSL_MODE_HANDSHAKE_CUTTHROUGH) && \
+  FOLLY_SSLCONTEXT_USE_TLS_FALSE_START
+  } else {
+    const SSL_CIPHER *cipher = ssl->s3->tmp.new_cipher;
+    if (cipher && ctx->canUseFalseStartWithCipher(cipher)) {
+      SSL_set_mode(ssl, SSL_MODE_HANDSHAKE_CUTTHROUGH);
+    }
+#endif
   }
   return SSL_TLSEXT_ERR_OK;
 }
@@ -598,6 +680,11 @@ static void dyn_destroy(struct CRYPTO_dynlock_value* lock, const char*, int) {
 
 void SSLContext::setSSLLockTypes(std::map<int, SSLLockType> inLockTypes) {
   lockTypes() = inLockTypes;
+}
+
+void SSLContext::markInitialized() {
+  std::lock_guard<std::mutex> g(mutex_);
+  initialized_ = true;
 }
 
 void SSLContext::initializeOpenSSL() {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -102,8 +102,14 @@ struct Futex : Atom<uint32_t>, boost::noncopyable {
     }
   }
 
-  /** Wakens up to count waiters where (waitMask & wakeMask) != 0,
-   *  returning the number of awoken threads. */
+  /** Wakens up to count waiters where (waitMask & wakeMask) !=
+   *  0, returning the number of awoken threads, or -1 if an error
+   *  occurred.  Note that when constructing a concurrency primitive
+   *  that can guard its own destruction, it is likely that you will
+   *  want to ignore EINVAL here (as well as making sure that you
+   *  never touch the object after performing the memory store that
+   *  is the linearization point for unlock or control handoff).
+   *  See https://sourceware.org/bugzilla/show_bug.cgi?id=13690 */
   int futexWake(int count = std::numeric_limits<int>::max(),
                 uint32_t wakeMask = -1);
 
@@ -130,7 +136,8 @@ struct EmulatedFutexAtomic : public std::atomic<T> {
   EmulatedFutexAtomic() noexcept = default;
   constexpr /* implicit */ EmulatedFutexAtomic(T init) noexcept
       : std::atomic<T>(init) {}
-  EmulatedFutexAtomic(const EmulatedFutexAtomic& rhs) = delete;
+  // It doesn't copy or move
+  EmulatedFutexAtomic(EmulatedFutexAtomic&& rhs) = delete;
 };
 
 /* Available specializations, with definitions elsewhere */

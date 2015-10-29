@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
@@ -34,6 +34,8 @@ class AsyncTimeout;
  */
 class TimeoutManager {
  public:
+  typedef std::chrono::milliseconds timeout_type;
+
   enum class InternalEnum {
     INTERNAL,
     NORMAL
@@ -52,7 +54,7 @@ class TimeoutManager {
    * Schedules AsyncTimeout to fire after `timeout` milliseconds
    */
   virtual bool scheduleTimeout(AsyncTimeout* obj,
-                               std::chrono::milliseconds timeout) = 0;
+                               timeout_type timeout) = 0;
 
   /**
    * Cancels the AsyncTimeout, if scheduled

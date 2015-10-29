@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,9 +34,6 @@
 namespace folly { namespace detail {
 
 // declaration of functions in Range.cpp
-size_t qfind_first_byte_of_memchr(const StringPiece haystack,
-                                  const StringPiece needles);
-
 size_t qfind_first_byte_of_byteset(const StringPiece haystack,
                                    const StringPiece needles);
 
@@ -850,19 +847,14 @@ struct NoSseNeedleFinder {
   }
 };
 
-struct MemchrNeedleFinder {
-  static size_t find_first_byte_of(StringPiece haystack, StringPiece needles) {
-    return detail::qfind_first_byte_of_memchr(haystack, needles);
-  }
-};
-
 struct ByteSetNeedleFinder {
   static size_t find_first_byte_of(StringPiece haystack, StringPiece needles) {
     return detail::qfind_first_byte_of_byteset(haystack, needles);
   }
 };
 
-typedef ::testing::Types<SseNeedleFinder, NoSseNeedleFinder, MemchrNeedleFinder,
+typedef ::testing::Types<SseNeedleFinder,
+                         NoSseNeedleFinder,
                          ByteSetNeedleFinder> NeedleFinders;
 TYPED_TEST_CASE(NeedleFinderTest, NeedleFinders);
 
@@ -907,7 +899,7 @@ TYPED_TEST(NeedleFinderTest, Unaligned) {
   string s = "0123456789ABCDEFGH";
   for (size_t i = 0; i < s.size(); ++i) {
     StringPiece a(s.c_str() + i);
-    for (int j = 0; j < s.size(); ++j) {
+    for (size_t j = 0; j < s.size(); ++j) {
       StringPiece b(s.c_str() + j);
       EXPECT_EQ((i > j) ? 0 : j - i, this->find_first_byte_of(a, b));
     }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -142,6 +142,15 @@ void SocketAddress::setFromIpPort(const char* ip, uint16_t port) {
   setFromAddrInfo(results.info);
 }
 
+void SocketAddress::setFromIpAddrPort(const IPAddress& ipAddr, uint16_t port) {
+  if (external_) {
+    storage_.un.free();
+    external_ = false;
+  }
+  storage_.addr = ipAddr;
+  port_ = port;
+}
+
 void SocketAddress::setFromLocalPort(uint16_t port) {
   ScopedAddrInfo results(getAddrInfo(nullptr, port, AI_ADDRCONFIG));
   setFromLocalAddr(results.info);
@@ -220,12 +229,8 @@ void SocketAddress::setFromSockaddr(const struct sockaddr* address) {
       "SocketAddress::setFromSockaddr() called "
       "with unsupported address type");
   }
-  if (external_) {
-    storage_.un.free();
-    external_ = false;
-  }
-  storage_.addr = folly::IPAddress(address);
-  port_ = port;
+
+  setFromIpAddrPort(folly::IPAddress(address), port);
 }
 
 void SocketAddress::setFromSockaddr(const struct sockaddr* address,

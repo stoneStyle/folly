@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -78,7 +78,7 @@ typename AtomicHashMap<KeyT, ValueT, HashFcn, EqualFcn, Allocator>::SimpleRetT
 AtomicHashMap<KeyT, ValueT, HashFcn, EqualFcn, Allocator>::
 insertInternal(key_type key, T&& value) {
  beginInsertInternal:
-  int nextMapIdx = // this maintains our state
+  auto nextMapIdx = // this maintains our state
     numMapsAllocated_.load(std::memory_order_acquire);
   typename SubMap::SimpleRetT ret;
   FOR_EACH_RANGE(i, 0, nextMapIdx) {

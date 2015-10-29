@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -376,6 +376,15 @@ TEST(IOBufQueue, PopFirst) {
   checkConsistency(queue);
   EXPECT_EQ((IOBuf*)nullptr, queue.front());
   EXPECT_EQ(0, queue.chainLength());
+}
+
+TEST(IOBufQueue, AppendToString) {
+  IOBufQueue queue;
+  queue.append("hello ", 6);
+  queue.append("world", 5);
+  std::string s;
+  queue.appendToString(s);
+  EXPECT_EQ("hello world", s);
 }
 
 int main(int argc, char** argv) {

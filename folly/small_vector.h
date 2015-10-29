@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -109,10 +109,9 @@ namespace detail {
     !FOLLY_IS_TRIVIALLY_COPYABLE(T)
   >::type
   moveToUninitialized(T* first, T* last, T* out) {
-    auto const count = last - first;
     std::size_t idx = 0;
     try {
-      for (; idx < count; ++first, ++idx) {
+      for (; first != last; ++first, ++idx) {
         new (&out[idx]) T(std::move(*first));
       }
     } catch (...) {

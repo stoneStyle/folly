@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -71,6 +71,10 @@ class SocketAddress {
     } else {
       setFromIpPort(host.c_str(), port);
     }
+  }
+
+  SocketAddress(const IPAddress& ipAddr, uint16_t port) {
+    setFromIpAddrPort(ipAddr, port);
   }
 
   SocketAddress(const SocketAddress& addr) {
@@ -189,6 +193,14 @@ class SocketAddress {
   void setFromIpPort(const std::string& ip, uint16_t port) {
     setFromIpPort(ip.c_str(), port);
   }
+
+  /**
+   * Initialize this SocketAddress from an IPAddress struct and port.
+   *
+   * @param ip The IP address in IPAddress format
+   * @param port The port (in host byte order)
+   */
+  void setFromIpAddrPort(const IPAddress& ip, uint16_t port);
 
   /**
    * Initialize this SocketAddress from a local port number.

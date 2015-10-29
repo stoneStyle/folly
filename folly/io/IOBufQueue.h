@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -260,6 +260,11 @@ class IOBufQueue {
    * same queue without reallocating.
    */
   void clear();
+
+  /**
+   * Append the queue to a std::string. Non-destructive.
+   */
+  void appendToString(std::string& out) const;
 
   /** Movable */
   IOBufQueue(IOBufQueue&&) noexcept;

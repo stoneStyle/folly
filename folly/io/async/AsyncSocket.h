@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -186,7 +186,7 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
    * This prevents callers from deleting a AsyncSocket while it is invoking a
    * callback.
    */
-  virtual void destroy();
+  virtual void destroy() override;
 
   /**
    * Get the EventBase used by this socket.
@@ -238,7 +238,7 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
   typedef std::map<OptionKey, int> OptionMap;
 
   static const OptionMap emptyOptionMap;
-  static const folly::SocketAddress anyAddress;
+  static const folly::SocketAddress& anyAddress();
 
   /**
    * Initiate a connection.
@@ -254,7 +254,7 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
                const folly::SocketAddress& address,
                int timeout = 0,
                const OptionMap &options = emptyOptionMap,
-               const folly::SocketAddress& bindAddr = anyAddress
+               const folly::SocketAddress& bindAddr = anyAddress()
                ) noexcept;
   void connect(ConnectCallback* callback, const std::string& ip, uint16_t port,
                int timeout = 00,
@@ -397,6 +397,13 @@ class AsyncSocket : virtual public AsyncTransportWrapper {
    *         or a non-zero errno value on error.
    */
   int setNoDelay(bool noDelay);
+
+
+  /**
+   * Set the FD_CLOEXEC flag so that the socket will be closed if the program
+   * later forks and execs.
+   */
+  void setCloseOnExec();
 
   /*
    * Set the Flavor of Congestion Control to be used for this Socket

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -28,6 +28,9 @@
 namespace folly {
 
 namespace detail {
+
+// Updates the end of the buffer after the comma separators have been added.
+void insertThousandsGroupingUnsafe(char* start_buffer, char** end_buffer);
 
 extern const char formatHexUpper[256][2];
 extern const char formatHexLower[256][2];
@@ -199,8 +202,6 @@ template <class Derived, bool containerMode, class... Args>
 template <class Output>
 void BaseFormatter<Derived, containerMode, Args...>::appendOutput(Output& out)
     const {
-  auto p = str_.begin();
-  auto end = str_.end();
 
   // Copy raw string (without format specifiers) to output;
   // not as simple as we'd like, as we still need to translate "}}" to "}"
@@ -224,6 +225,9 @@ void BaseFormatter<Derived, containerMode, Args...>::appendOutput(Output& out)
       ++p;
     }
   };
+
+  auto p = str_.begin();
+  auto end = str_.end();
 
   int nextArg = 0;
   bool hasDefaultArgIndex = false;
@@ -294,7 +298,7 @@ template <class Derived, bool containerMode, class... Args>
 void writeTo(FILE* fp,
              const BaseFormatter<Derived, containerMode, Args...>& formatter) {
   auto writer = [fp] (StringPiece sp) {
-    ssize_t n = fwrite(sp.data(), 1, sp.size(), fp);
+    size_t n = fwrite(sp.data(), 1, sp.size(), fp);
     if (n < sp.size()) {
       throwSystemError("Formatter writeTo", "fwrite failed");
     }
@@ -492,27 +496,31 @@ class FormatValue<
     char* valBufBegin = nullptr;
     char* valBufEnd = nullptr;
 
-    // Defer to sprintf
-    auto useSprintf = [&] (const char* format) mutable {
-      valBufBegin = valBuf + 3;  // room for sign and base prefix
-      valBufEnd = valBufBegin + sprintf(valBufBegin, format,
-                                        static_cast<uintmax_t>(uval));
-    };
-
     int prefixLen = 0;
-
     switch (presentation) {
-    case 'n':  // TODO(tudorb): locale awareness?
+    case 'n':
+      arg.enforce(!arg.basePrefix,
+                  "base prefix not allowed with '", presentation,
+                  "' specifier");
+
+      arg.enforce(!arg.thousandsSeparator,
+                  "cannot use ',' with the '", presentation,
+                  "' specifier");
+
+      valBufBegin = valBuf + 3;  // room for sign and base prefix
+      valBufEnd = valBufBegin + sprintf(valBufBegin, "%'ju",
+                                        static_cast<uintmax_t>(uval));
+      break;
     case 'd':
       arg.enforce(!arg.basePrefix,
                   "base prefix not allowed with '", presentation,
                   "' specifier");
+      valBufBegin = valBuf + 3;  // room for sign and base prefix
+
+      // Use uintToBuffer, faster than sprintf
+      valBufEnd = valBufBegin + uint64ToBufferUnsafe(uval, valBufBegin);
       if (arg.thousandsSeparator) {
-        useSprintf("%'ju");
-      } else {
-        // Use uintToBuffer, faster than sprintf
-        valBufBegin = valBuf + 3;
-        valBufEnd = valBufBegin + uint64ToBufferUnsafe(uval, valBufBegin);
+        detail::insertThousandsGroupingUnsafe(valBufBegin, &valBufEnd);
       }
       break;
     case 'c':
@@ -943,7 +951,7 @@ struct IndexableTraitsSeq : public FormatTraitsBase {
 
   static const value_type& at(const C& c, int idx,
                               const value_type& dflt) {
-    return (idx >= 0 && idx < c.size()) ? c.at(idx) : dflt;
+    return (idx >= 0 && size_t(idx) < c.size()) ? c.at(idx) : dflt;
   }
 };
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -288,34 +288,6 @@ struct IsOneOf {
 template <class T, class T1, class... Ts>
 struct IsOneOf<T, T1, Ts...> {
   enum { value = std::is_same<T, T1>::value || IsOneOf<T, Ts...>::value };
-};
-
-/**
- * A traits class to check for incomplete types.
- *
- * Example:
- *
- *  struct FullyDeclared {}; // complete type
- *  struct ForwardDeclared; // incomplete type
- *
- *  is_complete<int>::value // evaluates to true
- *  is_complete<FullyDeclared>::value // evaluates to true
- *  is_complete<ForwardDeclared>::value // evaluates to false
- *
- *  struct ForwardDeclared {}; // declared, at last
- *
- *  is_complete<ForwardDeclared>::value // now it evaluates to true
- *
- * @author: Marcelo Juchem <marcelo@fb.com>
- */
-template <typename T>
-class is_complete {
-  template <unsigned long long> struct sfinae {};
-  template <typename U>
-  constexpr static bool test(sfinae<sizeof(U)>*) { return true; }
-  template <typename> constexpr static bool test(...) { return false; }
-public:
-  constexpr static bool value = test<T>(nullptr);
 };
 
 /*

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -408,6 +408,11 @@ TEST(IPAddress, ToFullyQualifiedLocal) {
   IPAddress ip("::1");
   EXPECT_EQ("0000:0000:0000:0000:0000:0000:0000:0001", ip.toFullyQualified())
       << ip;
+}
+TEST(IPAddress, ToFullyQualifiedSize) {
+  auto actual = IPAddressV6::kToFullyQualifiedSize;
+  auto expected = IPAddress("::").toFullyQualified().size();
+  EXPECT_EQ(expected, actual);
 }
 
 // test v4-v6 mapped addresses

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements. See the NOTICE file
@@ -81,14 +81,14 @@ AsyncTimeout::~AsyncTimeout() {
   cancelTimeout();
 }
 
-bool AsyncTimeout::scheduleTimeout(std::chrono::milliseconds timeout) {
+bool AsyncTimeout::scheduleTimeout(TimeoutManager::timeout_type timeout) {
   assert(timeoutManager_ != nullptr);
   context_ = RequestContext::saveContext();
   return timeoutManager_->scheduleTimeout(this, timeout);
 }
 
 bool AsyncTimeout::scheduleTimeout(uint32_t milliseconds) {
-  return scheduleTimeout(std::chrono::milliseconds(milliseconds));
+  return scheduleTimeout(TimeoutManager::timeout_type(milliseconds));
 }
 
 void AsyncTimeout::cancelTimeout() {

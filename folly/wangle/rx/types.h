@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -25,7 +25,7 @@ namespace folly { namespace wangle {
   // alias it.
   typedef std::shared_ptr<folly::Executor> SchedulerPtr;
 
-  template <class T, size_t InlineObservers = 3> struct Observable;
+  template <class T, size_t InlineObservers = 3> class Observable;
   template <class T> struct Observer;
   template <class T> struct Subject;
 

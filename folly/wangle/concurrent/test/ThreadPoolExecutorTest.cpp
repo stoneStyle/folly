@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+using namespace folly;
 using namespace folly::wangle;
 using namespace std::chrono;
 
@@ -317,4 +318,57 @@ TEST(ThreadPoolExecutorTest, PriorityPreemptionTest) {
   pool.setNumThreads(1);
   pool.join();
   EXPECT_EQ(100, completed);
+}
+
+class TestObserver : public ThreadPoolExecutor::Observer {
+ public:
+  void threadStarted(ThreadPoolExecutor::ThreadHandle*) {
+    threads_++;
+  }
+  void threadStopped(ThreadPoolExecutor::ThreadHandle*) {
+    threads_--;
+  }
+  void threadPreviouslyStarted(ThreadPoolExecutor::ThreadHandle*) {
+    threads_++;
+  }
+  void threadNotYetStopped(ThreadPoolExecutor::ThreadHandle*) {
+    threads_--;
+  }
+  void checkCalls() {
+    ASSERT_EQ(threads_, 0);
+  }
+ private:
+  std::atomic<int> threads_{0};
+};
+
+TEST(ThreadPoolExecutorTest, IOObserver) {
+  auto observer = std::make_shared<TestObserver>();
+
+  {
+    IOThreadPoolExecutor exe(10);
+    exe.addObserver(observer);
+    exe.setNumThreads(3);
+    exe.setNumThreads(0);
+    exe.setNumThreads(7);
+    exe.removeObserver(observer);
+    exe.setNumThreads(10);
+  }
+
+  observer->checkCalls();
+}
+
+TEST(ThreadPoolExecutorTest, CPUObserver) {
+  auto observer = std::make_shared<TestObserver>();
+
+  {
+    CPUThreadPoolExecutor exe(10);
+    exe.addObserver(observer);
+    exe.setNumThreads(3);
+    exe.setNumThreads(0);
+    exe.setNumThreads(7);
+    exe.removeObserver(observer);
+    exe.setNumThreads(10);
+  }
+
+  observer->checkCalls();
 }

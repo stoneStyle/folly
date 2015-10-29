@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -58,6 +58,23 @@ TEST(SocketAddress, IPv4ToStringConversion) {
       EXPECT_EQ(addr.getAddressStr(), ipString);
     }
   }
+}
+
+TEST(SocketAddress, SetFromIpAddressPort) {
+  SocketAddress addr;
+  folly::IPAddress ipAddr("123.234.0.23");
+  addr.setFromIpAddrPort(ipAddr, 8888);
+  EXPECT_EQ(addr.getFamily(), AF_INET);
+  EXPECT_EQ(addr.getAddressStr(), "123.234.0.23");
+  EXPECT_EQ(addr.getIPAddress(), ipAddr);
+  EXPECT_EQ(addr.getPort(), 8888);
+
+  folly::IPAddress ip6Addr("2620:0:1cfe:face:b00c::3");
+  SocketAddress addr6(ip6Addr, 8888);
+  EXPECT_EQ(addr6.getFamily(), AF_INET6);
+  EXPECT_EQ(addr6.getAddressStr(), "2620:0:1cfe:face:b00c::3");
+  EXPECT_EQ(addr6.getIPAddress(), ip6Addr);
+  EXPECT_EQ(addr6.getPort(), 8888);
 }
 
 TEST(SocketAddress, SetFromIpv4) {

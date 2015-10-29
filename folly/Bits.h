@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -436,7 +436,7 @@ class BitIterator
   /**
    * Return the number of bits in an element of the underlying iterator.
    */
-  static size_t bitsPerBlock() {
+  static unsigned int bitsPerBlock() {
     return std::numeric_limits<
       typename std::make_unsigned<
         typename std::iterator_traits<BaseIter>::value_type
@@ -522,10 +522,10 @@ class BitIterator
   ssize_t distance_to(const BitIterator& other) const {
     return
       (other.base_reference() - this->base_reference()) * bitsPerBlock() +
-      (other.bitOffset_ - bitOffset_);
+      other.bitOffset_ - bitOffset_;
   }
 
-  ssize_t bitOffset_;
+  unsigned int bitOffset_;
 };
 
 /**

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,7 +17,11 @@
 #include <folly/Benchmark.h>
 #include <folly/Foreach.h>
 #include <folly/String.h>
+#include <algorithm>
 #include <iostream>
+#include <numeric>
+#include <random>
+#include <vector>
 using namespace folly;
 using namespace std;
 
@@ -127,6 +131,38 @@ BENCHMARK_RELATIVE_PARAM_MULTI(paramMultiRel, 1);
 
 BENCHMARK_PARAM_MULTI(paramMulti, 5);
 BENCHMARK_RELATIVE_PARAM_MULTI(paramMultiRel, 5);
+
+BENCHMARK_DRAW_LINE();
+
+BENCHMARK(BenchmarkSuspender_dismissing_void, iter) {
+  BenchmarkSuspender braces;
+  mt19937_64 rng;
+  while (iter--) {
+    vector<size_t> v(1 << 12, 0);
+    iota(v.begin(), v.end(), 0);
+    shuffle(v.begin(), v.end(), rng);
+    braces.dismissing([&] {
+        sort(v.begin(), v.end());
+    });
+  }
+}
+
+BENCHMARK(BenchmarkSuspender_dismissing_value, iter) {
+  BenchmarkSuspender braces;
+  mt19937_64 rng;
+  while (iter--) {
+    vector<size_t> v(1 << 12, 0);
+    iota(v.begin(), v.end(), 0);
+    shuffle(v.begin(), v.end(), rng);
+    auto s = braces.dismissing([&] {
+        sort(v.begin(), v.end());
+        return accumulate(v.begin(), v.end(), 0, [](size_t a, size_t e) {
+            return a + e;
+        });
+    });
+    doNotOptimizeAway(s);
+  }
+}
 
 int main(int argc, char** argv) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);

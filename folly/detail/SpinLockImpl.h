@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,7 +84,7 @@ class SpinLockAppleImpl {
 #include <pthread.h>
 #include <folly/Exception.h>
 
-#if !__ANDROID__ && !__APPLE__
+#if FOLLY_HAVE_PTHREAD_SPINLOCK_T
 
 // Apple and Android systems don't have pthread_spinlock_t, so we can't support
 // this version on those platforms.
@@ -122,7 +122,7 @@ class SpinLockPthreadImpl {
 
 }
 
-#endif // !__ANDROID__ && !__APPLE__
+#endif // FOLLY_HAVE_PTHREAD_SPINLOCK_T
 
 namespace folly {
 

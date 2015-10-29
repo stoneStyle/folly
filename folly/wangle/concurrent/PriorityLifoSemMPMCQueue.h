@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ class PriorityLifoSemMPMCQueue : public BlockingQueue<T> {
   explicit PriorityLifoSemMPMCQueue(uint32_t numPriorities, size_t capacity) {
     CHECK(numPriorities > 0);
     queues_.reserve(numPriorities);
-    for (int i = 0; i < numPriorities; i++) {
+    for (uint32_t i = 0; i < numPriorities; i++) {
       queues_.push_back(MPMCQueue<T>(capacity));
     }
   }

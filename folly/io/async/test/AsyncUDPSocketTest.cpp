@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -47,7 +47,8 @@ class UDPAcceptor
   void onListenStopped() noexcept {
   }
 
-  void onDataAvailable(const folly::SocketAddress& client,
+  void onDataAvailable(std::shared_ptr<folly::AsyncUDPSocket> socket,
+                       const folly::SocketAddress& client,
                        std::unique_ptr<folly::IOBuf> data,
                        bool truncated) noexcept {
 

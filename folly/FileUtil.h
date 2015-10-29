@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -164,6 +164,32 @@ bool readFile(const char* file_name, Container& out,
   }
 
   return true;
+}
+
+/**
+ * Writes container to file. The container is assumed to be
+ * contiguous, with element size equal to 1, and offering STL-like
+ * methods empty(), size(), and indexed access
+ * (e.g. std::vector<char>, std::string, fbstring, StringPiece).
+ *
+ * "flags" dictates the open flags to use. Default is to create file
+ * if it doesn't exist and truncate it.
+ *
+ * Returns: true on success or false on failure. In the latter case
+ * errno will be set appropriately by the failing system primitive.
+ */
+template <class Container>
+bool writeFile(const Container& data, const char* filename,
+              int flags = O_WRONLY | O_CREAT | O_TRUNC) {
+  static_assert(sizeof(data[0]) == 1,
+                "writeFile works with element size equal to 1");
+  int fd = open(filename, flags, 0666);
+  if (fd == -1) {
+    return false;
+  }
+  bool ok = data.empty() ||
+    writeFull(fd, &data[0], data.size()) == static_cast<ssize_t>(data.size());
+  return closeNoInt(fd) == 0 && ok;
 }
 
 }  // namespaces

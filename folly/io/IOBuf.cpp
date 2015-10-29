@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -698,7 +698,7 @@ void IOBuf::reserveSlow(uint64_t minHeadroom, uint64_t minTailroom) {
     return;
   }
 
-  size_t newAllocatedCapacity = goodExtBufferSize(newCapacity);
+  size_t newAllocatedCapacity = 0;
   uint8_t* newBuffer = nullptr;
   uint64_t newHeadroom = 0;
   uint64_t oldHeadroom = headroom();
@@ -708,8 +708,9 @@ void IOBuf::reserveSlow(uint64_t minHeadroom, uint64_t minTailroom) {
   SharedInfo* info = sharedInfo();
   if (info && (info->freeFn == nullptr) && length_ != 0 &&
       oldHeadroom >= minHeadroom) {
+    size_t headSlack = oldHeadroom - minHeadroom;
+    newAllocatedCapacity = goodExtBufferSize(newCapacity + headSlack);
     if (usingJEMalloc()) {
-      size_t headSlack = oldHeadroom - minHeadroom;
       // We assume that tailroom is more useful and more important than
       // headroom (not least because realloc / xallocx allow us to grow the
       // buffer at the tail, but not at the head)  So, if we have more headroom
@@ -743,6 +744,7 @@ void IOBuf::reserveSlow(uint64_t minHeadroom, uint64_t minTailroom) {
   // None of the previous reallocation strategies worked (or we're using
   // an internal buffer).  malloc/copy/free.
   if (newBuffer == nullptr) {
+    newAllocatedCapacity = goodExtBufferSize(newCapacity);
     void* p = malloc(newAllocatedCapacity);
     if (UNLIKELY(p == nullptr)) {
       throw std::bad_alloc();
@@ -870,15 +872,37 @@ IOBuf::Iterator IOBuf::cend() const {
 folly::fbvector<struct iovec> IOBuf::getIov() const {
   folly::fbvector<struct iovec> iov;
   iov.reserve(countChainElements());
+  appendToIov(&iov);
+  return iov;
+}
+
+void IOBuf::appendToIov(folly::fbvector<struct iovec>* iov) const {
   IOBuf const* p = this;
   do {
     // some code can get confused by empty iovs, so skip them
     if (p->length() > 0) {
-      iov.push_back({(void*)p->data(), folly::to<size_t>(p->length())});
+      iov->push_back({(void*)p->data(), folly::to<size_t>(p->length())});
     }
     p = p->next();
   } while (p != this);
-  return iov;
+}
+
+size_t IOBuf::fillIov(struct iovec* iov, size_t len) const {
+  IOBuf const* p = this;
+  size_t i = 0;
+  while (i < len) {
+    // some code can get confused by empty iovs, so skip them
+    if (p->length() > 0) {
+      iov[i].iov_base = const_cast<uint8_t*>(p->data());
+      iov[i].iov_len = p->length();
+      i++;
+    }
+    p = p->next();
+    if (p == this) {
+      return i;
+    }
+  }
+  return 0;
 }
 
 size_t IOBufHash::operator()(const IOBuf& buf) const {

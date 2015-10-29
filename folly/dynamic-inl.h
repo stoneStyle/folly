@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -950,7 +950,7 @@ class FormatValue<detail::DefaultValueWrapper<dynamic, V>> {
     case dynamic::ARRAY:
       {
         int key = arg.splitIntKey();
-        if (key >= 0 && key < c.size()) {
+        if (key >= 0 && size_t(key) < c.size()) {
           FormatValue<dynamic>(c.at(key)).format(arg, cb);
         } else{
           FormatValue<V>(val_.defaultValue).format(arg, cb);

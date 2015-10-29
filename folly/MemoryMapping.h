@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -157,6 +157,7 @@ class MemoryMapping : boost::noncopyable {
    * Advise the kernel about memory access.
    */
   void advise(int advice) const;
+  void advise(int advice, size_t offset, size_t length) const;
 
   /**
    * A bitwise cast of the mapped bytes as range of values. Only intended for

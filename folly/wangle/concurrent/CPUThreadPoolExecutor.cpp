@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,7 +19,7 @@
 
 namespace folly { namespace wangle {
 
-const size_t CPUThreadPoolExecutor::kDefaultMaxQueueSize = 1 << 18;
+const size_t CPUThreadPoolExecutor::kDefaultMaxQueueSize = 1 << 14;
 const size_t CPUThreadPoolExecutor::kDefaultNumPriorities = 2;
 
 CPUThreadPoolExecutor::CPUThreadPoolExecutor(
@@ -55,6 +55,18 @@ CPUThreadPoolExecutor::CPUThreadPoolExecutor(
           folly::make_unique<PriorityLifoSemMPMCQueue<CPUTask>>(
               numPriorities,
               CPUThreadPoolExecutor::kDefaultMaxQueueSize),
+          std::move(threadFactory)) {}
+
+CPUThreadPoolExecutor::CPUThreadPoolExecutor(
+    size_t numThreads,
+    uint32_t numPriorities,
+    size_t maxQueueSize,
+    std::shared_ptr<ThreadFactory> threadFactory)
+    : CPUThreadPoolExecutor(
+          numThreads,
+          folly::make_unique<PriorityLifoSemMPMCQueue<CPUTask>>(
+              numPriorities,
+              maxQueueSize),
           std::move(threadFactory)) {}
 
 CPUThreadPoolExecutor::~CPUThreadPoolExecutor() {
@@ -105,6 +117,10 @@ void CPUThreadPoolExecutor::threadRun(std::shared_ptr<Thread> thread) {
     auto task = taskQueue_->take();
     if (UNLIKELY(task.poison)) {
       CHECK(threadsToStop_-- > 0);
+      for (auto& o : observers_) {
+        o->threadStopped(thread.get());
+      }
+
       stoppedThreads_.add(thread);
       return;
     } else {

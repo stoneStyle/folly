@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014, Facebook, Inc.
+ *  Copyright (c) 2015, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -9,17 +9,18 @@
  */
 #pragma once
 
-#include "folly/wangle/acceptor/ServerSocketConfig.h"
-#include "folly/wangle/acceptor/ConnectionCounter.h"
+#include <folly/wangle/acceptor/ServerSocketConfig.h>
+#include <folly/wangle/acceptor/ConnectionCounter.h>
 #include <folly/wangle/acceptor/ConnectionManager.h>
-#include "folly/wangle/acceptor/LoadShedConfiguration.h"
-#include "folly/wangle/ssl/SSLCacheProvider.h"
-#include "folly/wangle/acceptor/TransportInfo.h"
+#include <folly/wangle/acceptor/LoadShedConfiguration.h>
+#include <folly/wangle/ssl/SSLCacheProvider.h>
+#include <folly/wangle/acceptor/TransportInfo.h>
 
 #include <chrono>
 #include <event.h>
 #include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncServerSocket.h>
+#include <folly/io/async/AsyncUDPServerSocket.h>
 
 namespace folly { namespace wangle {
 class ManagedConnection;
@@ -46,7 +47,8 @@ class SSLContextManager;
  */
 class Acceptor :
   public folly::AsyncServerSocket::AcceptCallback,
-  public folly::wangle::ConnectionManager::Callback {
+  public folly::wangle::ConnectionManager::Callback,
+  public AsyncUDPServerSocket::Callback  {
  public:
 
   enum class State : uint32_t {
@@ -92,7 +94,7 @@ class Acceptor :
    */
   uint32_t getNumConnections() const {
     return downstreamConnectionManager_ ?
-        downstreamConnectionManager_->getNumConnections() : 0;
+      (uint32_t)downstreamConnectionManager_->getNumConnections() : 0;
   }
 
   /**
@@ -170,7 +172,8 @@ class Acceptor :
   void processEstablishedConnection(
     int fd,
     const SocketAddress& clientAddr,
-    std::chrono::steady_clock::time_point acceptTime
+    std::chrono::steady_clock::time_point acceptTime,
+    TransportInfo& tinfo
   ) noexcept;
 
   /**
@@ -178,6 +181,14 @@ class Acceptor :
    * a connection's transaction count reaches zero, the connection closes.
    */
   void drainAllConnections();
+
+  /**
+   * Drop all connections.
+   *
+   * forceStop() schedules dropAllConnections() to be called in the acceptor's
+   * thread.
+   */
+  void dropAllConnections();
 
  protected:
   friend class AcceptorHandshakeHelper;
@@ -218,7 +229,14 @@ class Acceptor :
       AsyncSocket::UniquePtr sock,
       const folly::SocketAddress* address,
       const std::string& nextProtocolName,
-      const TransportInfo& tinfo) = 0;
+      const TransportInfo& tinfo) {}
+
+  void onListenStarted() noexcept {}
+  void onListenStopped() noexcept {}
+  void onDataAvailable(
+    std::shared_ptr<AsyncUDPSocket> socket,
+    const SocketAddress&,
+    std::unique_ptr<IOBuf>, bool) noexcept {}
 
   virtual AsyncSocket::UniquePtr makeNewAsyncSocket(EventBase* base, int fd) {
     return AsyncSocket::UniquePtr(new AsyncSocket(base, fd));
@@ -236,14 +254,6 @@ class Acceptor :
       const AsyncSSLSocket* sock,
       std::chrono::milliseconds acceptLatency,
       SSLErrorEnum error) noexcept {}
-
-  /**
-   * Drop all connections.
-   *
-   * forceStop() schedules dropAllConnections() to be called in the acceptor's
-   * thread.
-   */
-  void dropAllConnections();
 
  protected:
 
@@ -339,7 +349,7 @@ class Acceptor :
 
 class AcceptorFactory {
  public:
-  virtual std::shared_ptr<Acceptor> newAcceptor() = 0;
+  virtual std::shared_ptr<Acceptor> newAcceptor(folly::EventBase*) = 0;
   virtual ~AcceptorFactory() = default;
 };
 

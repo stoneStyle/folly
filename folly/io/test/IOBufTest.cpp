@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -964,6 +964,19 @@ TEST(IOBuf, getIov) {
   buf->prev()->clear();
   iov = buf->getIov();
   EXPECT_EQ(count - 3, iov.size());
+
+  // test appending to an existing iovec array
+  iov.clear();
+  const char localBuf[] = "hello";
+  iov.push_back({(void*)localBuf, sizeof(localBuf)});
+  iov.push_back({(void*)localBuf, sizeof(localBuf)});
+  buf->appendToIov(&iov);
+  EXPECT_EQ(count - 1, iov.size());
+  EXPECT_EQ(localBuf, iov[0].iov_base);
+  EXPECT_EQ(localBuf, iov[1].iov_base);
+  // The first two IOBufs were cleared, so the next iov entry
+  // should be the third IOBuf in the chain.
+  EXPECT_EQ(buf->next()->next()->data(), iov[2].iov_base);
 }
 
 TEST(IOBuf, move) {
@@ -1066,6 +1079,33 @@ TEST(IOBuf, HashAndEqual) {
 
   EXPECT_TRUE(eq(e, f));
   EXPECT_EQ(hash(e), hash(f));
+}
+
+// reserveSlow() had a bug when reallocating the buffer in place. It would
+// preserve old headroom if it's not too much (heuristically) but wouldn't
+// adjust the requested amount of memory to account for that; the end result
+// would be that reserve() would return with less tailroom than requested.
+TEST(IOBuf, ReserveWithHeadroom) {
+  // This is assuming jemalloc, where we know that 4096 and 8192 bytes are
+  // valid (and consecutive) allocation sizes. We're hoping that our
+  // 4096-byte buffer can be expanded in place to 8192 (in practice, this
+  // usually happens).
+  const char data[] = "Lorem ipsum dolor sit amet, consectetur adipiscing elit";
+  constexpr size_t reservedSize = 24;  // sizeof(SharedInfo)
+  // chosen carefully so that the buffer is exactly 4096 bytes
+  IOBuf buf(IOBuf::CREATE, 4096 - reservedSize);
+  buf.advance(10);
+  memcpy(buf.writableData(), data, sizeof(data));
+  buf.append(sizeof(data));
+  EXPECT_EQ(sizeof(data), buf.length());
+
+  // Grow the buffer (hopefully in place); this would incorrectly reserve
+  // the 10 bytes of headroom, giving us 10 bytes less than requested.
+  size_t tailroom = 8192 - reservedSize - sizeof(data);
+  buf.reserve(0, tailroom);
+  EXPECT_LE(tailroom, buf.tailroom());
+  EXPECT_EQ(sizeof(data), buf.length());
+  EXPECT_EQ(0, memcmp(data, buf.data(), sizeof(data)));
 }
 
 int main(int argc, char** argv) {

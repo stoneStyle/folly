@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -337,6 +337,13 @@ inline uint32_t hsieh_hash32_str(const std::string& str) {
 
 template<class Key>
 struct hasher;
+
+struct Hash {
+  template <class T>
+  size_t operator()(const T& v) const {
+    return hasher<T>()(v);
+  }
+};
 
 template<> struct hasher<int32_t> {
   size_t operator()(int32_t key) const {

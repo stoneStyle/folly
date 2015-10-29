@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -437,6 +437,7 @@ int totalValue() {
 
 }  // namespace
 
+#ifdef FOLLY_HAVE_PTHREAD_ATFORK
 TEST(ThreadLocal, Fork) {
   EXPECT_EQ(1, ptr->value());  // ensure created
   EXPECT_EQ(1, totalValue());
@@ -506,6 +507,7 @@ TEST(ThreadLocal, Fork) {
 
   EXPECT_EQ(1, totalValue());
 }
+#endif
 
 struct HoldsOneTag2 {};
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -45,7 +45,7 @@ void run_mt_sequencer_thread(
     int numOps,
     uint32_t init,
     TurnSequencer<Atom>& seq,
-    Atom<int>& spinThreshold,
+    Atom<uint32_t>& spinThreshold,
     int& prev,
     int i) {
   for (int op = i; op < numOps; op += numThreads) {
@@ -59,7 +59,7 @@ void run_mt_sequencer_thread(
 template <template<typename> class Atom>
 void run_mt_sequencer_test(int numThreads, int numOps, uint32_t init) {
   TurnSequencer<Atom> seq(init);
-  Atom<int> spinThreshold(0);
+  Atom<uint32_t> spinThreshold(0);
 
   int prev = -1;
   std::vector<std::thread> threads(numThreads);
@@ -710,6 +710,11 @@ TEST(MPMCQueue, queue_moving) {
   } // c goes out of scope
   LIFECYCLE_STEP(DESTRUCTOR);
 }
+
+TEST(MPMCQueue, explicit_zero_capacity_fail) {
+  ASSERT_THROW(MPMCQueue<int> cq(0), std::invalid_argument);
+}
+
 
 int main(int argc, char ** argv) {
   testing::InitGoogleTest(&argc, argv);

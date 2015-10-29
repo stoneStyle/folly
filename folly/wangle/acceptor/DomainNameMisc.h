@@ -1,5 +1,5 @@
 /*
- *  Copyright (c) 2014, Facebook, Inc.
+ *  Copyright (c) 2015, Facebook, Inc.
  *  All rights reserved.
  *
  *  This source code is licensed under the BSD-style license found in the
@@ -57,14 +57,11 @@ struct dn_char_traits : public std::char_traits<char> {
 typedef std::basic_string<char, dn_char_traits> DNString;
 
 struct DNStringHash : public std::hash<std::string> {
-  size_t operator()(const DNString& s) const noexcept {
-    size_t h = static_cast<size_t>(0xc70f6907UL);
-    const char* d = s.data();
-    for (size_t i = 0; i < s.length(); ++i) {
-      char a = ::tolower(*d++);
-      h = std::_Hash_impl::hash(&a, sizeof(a), h);
-    }
-    return h;
+  size_t operator()(const DNString& s1) const noexcept {
+    std::string s2(s1.data(), s1.size());
+    for (char& c : s2)
+      c = ::tolower(c);
+    return std::hash<std::string>()(s2);
   }
 };
 

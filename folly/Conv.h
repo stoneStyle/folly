@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -46,12 +46,41 @@
 #define FOLLY_RANGE_CHECK_STRINGIZE(x) #x
 #define FOLLY_RANGE_CHECK_STRINGIZE2(x) FOLLY_RANGE_CHECK_STRINGIZE(x)
 
-#define FOLLY_RANGE_CHECK(condition, message)                               \
+// Android doesn't support std::to_string so just use a placeholder there.
+#ifdef __ANDROID__
+#define FOLLY_RANGE_CHECK_TO_STRING(x) std::string("N/A")
+#else
+#define FOLLY_RANGE_CHECK_TO_STRING(x) std::to_string(x)
+#endif
+
+#define FOLLY_RANGE_CHECK(condition, message, src)                          \
   ((condition) ? (void)0 : throw std::range_error(                          \
     (std::string(__FILE__ "(" FOLLY_RANGE_CHECK_STRINGIZE2(__LINE__) "): ") \
-     + (message)).c_str()))
+     + (message) + ": '" + (src) + "'").c_str()))
+
+#define FOLLY_RANGE_CHECK_BEGIN_END(condition, message, b, e)    \
+  FOLLY_RANGE_CHECK(condition, message, std::string((b), (e) - (b)))
+
+#define FOLLY_RANGE_CHECK_STRINGPIECE(condition, message, sp)    \
+  FOLLY_RANGE_CHECK(condition, message, std::string((sp).data(), (sp).size()))
 
 namespace folly {
+
+/**
+ * The identity conversion function.
+ * to<T>(T) returns itself for all types T.
+ */
+template <class Tgt, class Src>
+typename std::enable_if<std::is_same<Tgt, Src>::value, Tgt>::type
+to(const Src & value) {
+  return value;
+}
+
+template <class Tgt, class Src>
+typename std::enable_if<std::is_same<Tgt, Src>::value, Tgt>::type
+to(Src && value) {
+  return std::move(value);
+}
 
 /*******************************************************************************
  * Integral to integral
@@ -64,22 +93,24 @@ namespace folly {
  */
 template <class Tgt, class Src>
 typename std::enable_if<
-  std::is_integral<Src>::value && std::is_integral<Tgt>::value,
+  std::is_integral<Src>::value
+  && std::is_integral<Tgt>::value
+  && !std::is_same<Tgt, Src>::value,
   Tgt>::type
 to(const Src & value) {
   /* static */ if (std::numeric_limits<Tgt>::max()
                    < std::numeric_limits<Src>::max()) {
     FOLLY_RANGE_CHECK(
       (!greater_than<Tgt, std::numeric_limits<Tgt>::max()>(value)),
-      "Overflow"
-    );
+      "Overflow",
+      FOLLY_RANGE_CHECK_TO_STRING(value));
   }
   /* static */ if (std::is_signed<Src>::value &&
                    (!std::is_signed<Tgt>::value || sizeof(Src) > sizeof(Tgt))) {
     FOLLY_RANGE_CHECK(
       (!less_than<Tgt, std::numeric_limits<Tgt>::min()>(value)),
-      "Negative overflow"
-    );
+      "Negative overflow",
+      FOLLY_RANGE_CHECK_TO_STRING(value));
   }
   return static_cast<Tgt>(value);
 }
@@ -90,15 +121,19 @@ to(const Src & value) {
 
 template <class Tgt, class Src>
 typename std::enable_if<
-  std::is_floating_point<Tgt>::value && std::is_floating_point<Src>::value,
+  std::is_floating_point<Tgt>::value
+  && std::is_floating_point<Src>::value
+  && !std::is_same<Tgt, Src>::value,
   Tgt>::type
 to(const Src & value) {
   /* static */ if (std::numeric_limits<Tgt>::max() <
                    std::numeric_limits<Src>::max()) {
     FOLLY_RANGE_CHECK(value <= std::numeric_limits<Tgt>::max(),
-                      "Overflow");
+                      "Overflow",
+                      FOLLY_RANGE_CHECK_TO_STRING(value));
     FOLLY_RANGE_CHECK(value >= -std::numeric_limits<Tgt>::max(),
-                      "Negative overflow");
+                      "Negative overflow",
+                      FOLLY_RANGE_CHECK_TO_STRING(value));
   }
   return boost::implicit_cast<Tgt>(value);
 }
@@ -638,6 +673,11 @@ struct HasLengthEstimator : std::false_type {};
 template <class Src>
 constexpr typename std::enable_if<
   !std::is_fundamental<Src>::value
+#ifdef FOLLY_HAVE_INT128_T
+  // On OSX 10.10, is_fundamental<__int128> is false :-O
+  && !std::is_same<__int128, Src>::value
+  && !std::is_same<unsigned __int128, Src>::value
+#endif
   && !IsSomeString<Src>::value
   && !std::is_convertible<Src, const char*>::value
   && !std::is_convertible<Src, StringPiece>::value
@@ -818,20 +858,6 @@ toAppendDelimFit(const Delimiter& delim, const Ts&... vs) {
 
 template <class De, class Ts>
 void toAppendDelimFit(const De&, const Ts&) {}
-
-/**
- * to<SomeString>(SomeString str) or to<StringPiece>(StringPiece str) returns
- * itself. As both std::string and folly::fbstring use Copy-on-Write, it's much
- * more efficient by avoiding copying the underlying char array.
- */
-template <class Tgt, class Src>
-typename std::enable_if<
-  (IsSomeString<Tgt>::value
-   || std::is_same<Tgt, folly::StringPiece>::value)
-  && std::is_same<Tgt, Src>::value, Tgt>::type
-to(const Src & value) {
-  return value;
-}
 
 /**
  * to<SomeString>(v1, v2, ...) uses toAppend() (see below) as back-end
@@ -1064,9 +1090,10 @@ __attribute__((__aligned__(16))) constexpr uint16_t shift1000[] = {
           if (*b != '0') return digits_to<Tgt>(b, e);
         }
       }
-      FOLLY_RANGE_CHECK(size == std::numeric_limits<Tgt>::digits10 + 1 &&
-                        strncmp(b, detail::MaxString<Tgt>::value, size) <= 0,
-                        "Numeric overflow upon conversion");
+      FOLLY_RANGE_CHECK_BEGIN_END(
+        size == std::numeric_limits<Tgt>::digits10 + 1 &&
+        strncmp(b, detail::MaxString<Tgt>::value, size) <= 0,
+        "Numeric overflow upon conversion", b, e);
     }
 
     // Here we know that the number won't overflow when
@@ -1109,7 +1136,8 @@ __attribute__((__aligned__(16))) constexpr uint16_t shift1000[] = {
     }
 
     assert(b == e);
-    FOLLY_RANGE_CHECK(size > 0, "Found no digits to convert in input");
+    FOLLY_RANGE_CHECK_BEGIN_END(size > 0,
+                                "Found no digits to convert in input", b, e);
     return result;
   }
 
@@ -1141,18 +1169,19 @@ typename std::enable_if<
   std::is_integral<Tgt>::value && std::is_signed<Tgt>::value,
   Tgt>::type
 to(const char * b, const char * e) {
-  FOLLY_RANGE_CHECK(b < e, "Empty input string in conversion to integral");
+  FOLLY_RANGE_CHECK(b < e, "Empty input string in conversion to integral",
+                    to<std::string>("b: ", intptr_t(b), " e: ", intptr_t(e)));
   if (!isdigit(*b)) {
     if (*b == '-') {
       Tgt result = -to<typename std::make_unsigned<Tgt>::type>(b + 1, e);
-      FOLLY_RANGE_CHECK(result <= 0, "Negative overflow.");
+      FOLLY_RANGE_CHECK_BEGIN_END(result <= 0, "Negative overflow.", b, e);
       return result;
     }
-    FOLLY_RANGE_CHECK(*b == '+', "Invalid lead character");
+    FOLLY_RANGE_CHECK_BEGIN_END(*b == '+', "Invalid lead character", b, e);
     ++b;
   }
   Tgt result = to<typename std::make_unsigned<Tgt>::type>(b, e);
-  FOLLY_RANGE_CHECK(result >= 0, "Overflow.");
+  FOLLY_RANGE_CHECK_BEGIN_END(result >= 0, "Overflow", b, e);
   return result;
 }
 
@@ -1175,7 +1204,8 @@ to(StringPiece * src) {
 
   auto b = src->data(), past = src->data() + src->size();
   for (;; ++b) {
-    FOLLY_RANGE_CHECK(b < past, "No digits found in input string");
+    FOLLY_RANGE_CHECK_STRINGPIECE(b < past,
+                                  "No digits found in input string", *src);
     if (!isspace(*b)) break;
   }
 
@@ -1188,15 +1218,16 @@ to(StringPiece * src) {
       if (*m == '-') {
         negative = true;
       } else {
-        FOLLY_RANGE_CHECK(*m == '+', "Invalid leading character in conversion"
-                          " to integral");
+        FOLLY_RANGE_CHECK_STRINGPIECE(*m == '+', "Invalid leading character in "
+                                      "conversion to integral", *src);
       }
       ++b;
       ++m;
     }
   }
-  FOLLY_RANGE_CHECK(m < past, "No digits found in input string");
-  FOLLY_RANGE_CHECK(isdigit(*m), "Non-digit character found");
+  FOLLY_RANGE_CHECK_STRINGPIECE(m < past, "No digits found in input string",
+                                *src);
+  FOLLY_RANGE_CHECK_STRINGPIECE(isdigit(*m), "Non-digit character found", *src);
   m = detail::findFirstNonDigit<Tgt>(m + 1, past);
 
   Tgt result;
@@ -1206,10 +1237,11 @@ to(StringPiece * src) {
     auto t = detail::digits_to<typename std::make_unsigned<Tgt>::type>(b, m);
     if (negative) {
       result = -t;
-      FOLLY_RANGE_CHECK(is_non_positive(result), "Negative overflow");
+      FOLLY_RANGE_CHECK_STRINGPIECE(is_non_positive(result),
+                                    "Negative overflow", *src);
     } else {
       result = t;
-      FOLLY_RANGE_CHECK(is_non_negative(result), "Overflow");
+      FOLLY_RANGE_CHECK_STRINGPIECE(is_non_negative(result), "Overflow", *src);
     }
   }
   src->advance(m - src->data());
@@ -1235,7 +1267,9 @@ namespace detail {
  */
 inline void enforceWhitespace(const char* b, const char* e) {
   for (; b != e; ++b) {
-    FOLLY_RANGE_CHECK(isspace(*b), to<std::string>("Non-whitespace: ", *b));
+    FOLLY_RANGE_CHECK_BEGIN_END(isspace(*b),
+                                to<std::string>("Non-whitespace: ", *b),
+                                b, e);
   }
 }
 
@@ -1277,7 +1311,8 @@ to(StringPiece *const src) {
          std::numeric_limits<double>::quiet_NaN(),
          nullptr, nullptr);
 
-  FOLLY_RANGE_CHECK(!src->empty(), "No digits found in input string");
+  FOLLY_RANGE_CHECK_STRINGPIECE(!src->empty(),
+                                "No digits found in input string", *src);
 
   int length;
   auto result = conv.StringToDouble(src->data(),
@@ -1403,13 +1438,15 @@ to(const Src & value) {
 // std::underlying_type became available by gcc 4.7.0
 
 template <class Tgt, class Src>
-typename std::enable_if<std::is_enum<Src>::value, Tgt>::type
+typename std::enable_if<
+  std::is_enum<Src>::value && !std::is_same<Src, Tgt>::value, Tgt>::type
 to(const Src & value) {
   return to<Tgt>(static_cast<typename std::underlying_type<Src>::type>(value));
 }
 
 template <class Tgt, class Src>
-typename std::enable_if<std::is_enum<Tgt>::value, Tgt>::type
+typename std::enable_if<
+  std::is_enum<Tgt>::value && !std::is_same<Src, Tgt>::value, Tgt>::type
 to(const Src & value) {
   return static_cast<Tgt>(to<typename std::underlying_type<Tgt>::type>(value));
 }
@@ -1417,7 +1454,8 @@ to(const Src & value) {
 #else
 
 template <class Tgt, class Src>
-typename std::enable_if<std::is_enum<Src>::value, Tgt>::type
+typename std::enable_if<
+  std::is_enum<Src>::value && !std::is_same<Src, Tgt>::value, Tgt>::type
 to(const Src & value) {
   /* static */ if (Src(-1) < 0) {
     /* static */ if (sizeof(Src) <= sizeof(int)) {
@@ -1435,7 +1473,8 @@ to(const Src & value) {
 }
 
 template <class Tgt, class Src>
-typename std::enable_if<std::is_enum<Tgt>::value, Tgt>::type
+typename std::enable_if<
+  std::is_enum<Tgt>::value && !std::is_same<Src, Tgt>::value, Tgt>::type
 to(const Src & value) {
   /* static */ if (Tgt(-1) < 0) {
     /* static */ if (sizeof(Tgt) <= sizeof(int)) {
@@ -1461,8 +1500,10 @@ to(const Src & value) {
 // to avoid defining this global macro name in other files that include Conv.h.
 #ifndef FOLLY_CONV_INTERNAL
 #undef FOLLY_RANGE_CHECK
-#undef FOLLY_RANGE_CHECK_STRINGIZE2
+#undef FOLLY_RANGE_CHECK_BEGIN_END
+#undef FOLLY_RANGE_CHECK_STRINGPIECE
 #undef FOLLY_RANGE_CHECK_STRINGIZE
+#undef FOLLY_RANGE_CHECK_STRINGIZE2
 #endif
 
 #endif /* FOLLY_BASE_CONV_H_ */

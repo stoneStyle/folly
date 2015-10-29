@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -99,8 +99,13 @@ void vprintfError(const char* fmt, ...) {
     va_end(ap);
   };
 
+  // OSX's sprintf family does not return a negative number on a bad format
+  // string, but Linux does. It's unclear to me which behavior is more
+  // correct.
+#if !__APPLE__
   EXPECT_THROW({stringVPrintf(fmt, ap);},
                std::runtime_error);
+#endif
 }
 
 TEST(StringPrintf, VPrintf) {
@@ -215,6 +220,11 @@ TEST(Escape, uriEscape) {
                                                         UriEscapeMode::PATH));
   EXPECT_EQ("hello%2c+%2fworld", uriEscape<std::string>("hello, /world",
                                                         UriEscapeMode::QUERY));
+  EXPECT_EQ(
+    "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_.~",
+    uriEscape<std::string>(
+      "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_.~")
+  );
 }
 
 TEST(Escape, uriUnescape) {

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -33,6 +33,36 @@ static int32_t s32;
 static uint32_t u32;
 static int64_t s64;
 static uint64_t u64;
+
+// Test to<T>(T)
+TEST(Conv, Type2Type) {
+  int intV = 42;
+  EXPECT_EQ(to<int>(intV), 42);
+
+  float floatV = 4.2;
+  EXPECT_EQ(to<float>(floatV), 4.2f);
+
+  double doubleV = 0.42;
+  EXPECT_EQ(to<double>(doubleV), 0.42);
+
+  std::string stringV = "StdString";
+  EXPECT_EQ(to<std::string>(stringV), "StdString");
+
+  folly::fbstring fbStrV = "FBString";
+  EXPECT_EQ(to<folly::fbstring>(fbStrV), "FBString");
+
+  folly::StringPiece spV("StringPiece");
+  EXPECT_EQ(to<folly::StringPiece>(spV), "StringPiece");
+
+  // Rvalues
+  EXPECT_EQ(to<int>(42), 42);
+  EXPECT_EQ(to<float>(4.2f), 4.2f);
+  EXPECT_EQ(to<double>(.42), .42);
+  EXPECT_EQ(to<std::string>(std::string("Hello")), "Hello");
+  EXPECT_EQ(to<folly::fbstring>(folly::fbstring("hello")), "hello");
+  EXPECT_EQ(to<folly::StringPiece>(folly::StringPiece("Forty Two")),
+            "Forty Two");
+}
 
 TEST(Conv, Integral2Integral) {
   // Same size, different signs

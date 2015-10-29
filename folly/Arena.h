@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -84,7 +84,8 @@ class Arena {
     size = roundUp(size);
     bytesUsed_ += size;
 
-    if (LIKELY(end_ - ptr_ >= size)) {
+    assert(ptr_ <= end_);
+    if (LIKELY((size_t)(end_ - ptr_) >= size)) {
       // Fast path: there's enough room in the current block
       char* r = ptr_;
       ptr_ += size;

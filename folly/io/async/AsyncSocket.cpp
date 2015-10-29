@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -37,8 +37,6 @@ namespace folly {
 
 // static members initializers
 const AsyncSocket::OptionMap AsyncSocket::emptyOptionMap;
-const folly::SocketAddress AsyncSocket::anyAddress =
-  folly::SocketAddress("0.0.0.0", 0);
 
 const AsyncSocketException socketClosedLocallyEx(
     AsyncSocketException::END_OF_FILE, "socket closed locally");
@@ -179,7 +177,7 @@ AsyncSocket::AsyncSocket()
   : eventBase_(nullptr)
   , writeTimeout_(this, nullptr)
   , ioHandler_(this, nullptr) {
-  VLOG(5) << "new AsyncSocket(" << ")";
+  VLOG(5) << "new AsyncSocket()";
   init();
 }
 
@@ -194,11 +192,7 @@ AsyncSocket::AsyncSocket(EventBase* evb)
 AsyncSocket::AsyncSocket(EventBase* evb,
                            const folly::SocketAddress& address,
                            uint32_t connectTimeout)
-  : eventBase_(evb)
-  , writeTimeout_(this, evb)
-  , ioHandler_(this, evb) {
-  VLOG(5) << "new AsyncSocket(" << this << ", evb=" << evb << ")";
-  init();
+  : AsyncSocket(evb) {
   connect(nullptr, address, connectTimeout);
 }
 
@@ -206,11 +200,7 @@ AsyncSocket::AsyncSocket(EventBase* evb,
                            const std::string& ip,
                            uint16_t port,
                            uint32_t connectTimeout)
-  : eventBase_(evb)
-  , writeTimeout_(this, evb)
-  , ioHandler_(this, evb) {
-  VLOG(5) << "new AsyncSocket(" << this << ", evb=" << evb << ")";
-  init();
+  : AsyncSocket(evb) {
   connect(nullptr, ip, port, connectTimeout);
 }
 
@@ -222,6 +212,7 @@ AsyncSocket::AsyncSocket(EventBase* evb, int fd)
           << fd << ")";
   init();
   fd_ = fd;
+  setCloseOnExec();
   state_ = StateEnum::ESTABLISHED;
 }
 
@@ -280,6 +271,12 @@ int AsyncSocket::detachFd() {
   return fd;
 }
 
+const folly::SocketAddress& AsyncSocket::anyAddress() {
+  static const folly::SocketAddress anyAddress =
+    folly::SocketAddress("0.0.0.0", 0);
+  return anyAddress;
+}
+
 void AsyncSocket::setShutdownSocketSet(ShutdownSocketSet* newSS) {
   if (shutdownSocketSet_ == newSS) {
     return;
@@ -290,6 +287,15 @@ void AsyncSocket::setShutdownSocketSet(ShutdownSocketSet* newSS) {
   shutdownSocketSet_ = newSS;
   if (shutdownSocketSet_ && fd_ != -1) {
     shutdownSocketSet_->add(fd_);
+  }
+}
+
+void AsyncSocket::setCloseOnExec() {
+  int rv = fcntl(fd_, F_SETFD, FD_CLOEXEC);
+  if (rv != 0) {
+    throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
+                               withAddr("failed to set close-on-exec flag"),
+                               errno);
   }
 }
 
@@ -331,14 +337,7 @@ void AsyncSocket::connect(ConnectCallback* callback,
     }
     ioHandler_.changeHandlerFD(fd_);
 
-    // Set the FD_CLOEXEC flag so that the socket will be closed if the program
-    // later forks and execs.
-    int rv = fcntl(fd_, F_SETFD, FD_CLOEXEC);
-    if (rv != 0) {
-      throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
-                                withAddr("failed to set close-on-exec flag"),
-                                errno);
-    }
+    setCloseOnExec();
 
     // Put the socket in non-blocking mode
     int flags = fcntl(fd_, F_GETFL, 0);
@@ -346,7 +345,7 @@ void AsyncSocket::connect(ConnectCallback* callback,
       throw AsyncSocketException(AsyncSocketException::INTERNAL_ERROR,
                                 withAddr("failed to get socket flags"), errno);
     }
-    rv = fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
+    int rv = fcntl(fd_, F_SETFL, flags | O_NONBLOCK);
     if (rv == -1) {
       throw AsyncSocketException(
           AsyncSocketException::INTERNAL_ERROR,
@@ -376,7 +375,7 @@ void AsyncSocket::connect(ConnectCallback* callback,
             << ", fd=" << fd_ << ", host=" << address.describe().c_str();
 
     // bind the socket
-    if (bindAddr != anyAddress) {
+    if (bindAddr != anyAddress()) {
       int one = 1;
       if (::setsockopt(fd_, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one))) {
         doClose();
@@ -627,21 +626,8 @@ void AsyncSocket::writeChain(WriteCallback* callback, unique_ptr<IOBuf>&& buf,
 
 void AsyncSocket::writeChainImpl(WriteCallback* callback, iovec* vec,
     size_t count, unique_ptr<IOBuf>&& buf, WriteFlags flags) {
-  const IOBuf* head = buf.get();
-  const IOBuf* next = head;
-  unsigned i = 0;
-  do {
-    vec[i].iov_base = const_cast<uint8_t *>(next->data());
-    vec[i].iov_len = next->length();
-    // IOBuf can get confused by empty iovec buffers, so increment the
-    // output pointer only if the iovec buffer is non-empty.  We could
-    // end the loop with i < count, but that's ok.
-    if (vec[i].iov_len != 0) {
-      i++;
-    }
-    next = next->next();
-  } while (next != head);
-  writeImpl(callback, vec, i, std::move(buf), flags);
+  size_t veclen = buf->fillIov(vec, count);
+  writeImpl(callback, vec, veclen, std::move(buf), flags);
 }
 
 void AsyncSocket::writeImpl(WriteCallback* callback, const iovec* vec,

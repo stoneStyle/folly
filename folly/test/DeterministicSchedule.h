@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -248,9 +248,25 @@ struct DeterministicAtomic {
     return rv;
   }
 
+  T fetch_add(T v, std::memory_order mo = std::memory_order_seq_cst) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = data;
+    data += v;
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
   T operator-= (T v) noexcept {
     DeterministicSchedule::beforeSharedAccess();
     T rv = (data -= v);
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
+  T fetch_sub(T v, std::memory_order mo = std::memory_order_seq_cst) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = data;
+    data -= v;
     DeterministicSchedule::afterSharedAccess();
     return rv;
   }
@@ -262,9 +278,40 @@ struct DeterministicAtomic {
     return rv;
   }
 
+  T fetch_and(T v, std::memory_order mo = std::memory_order_seq_cst) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = data;
+    data &= v;
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
   T operator|= (T v) noexcept {
     DeterministicSchedule::beforeSharedAccess();
     T rv = (data |= v);
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
+  T fetch_or(T v, std::memory_order mo = std::memory_order_seq_cst) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = data;
+    data |= v;
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
+  T operator^= (T v) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = (data ^= v);
+    DeterministicSchedule::afterSharedAccess();
+    return rv;
+  }
+
+  T fetch_xor(T v, std::memory_order mo = std::memory_order_seq_cst) noexcept {
+    DeterministicSchedule::beforeSharedAccess();
+    T rv = data;
+    data ^= v;
     DeterministicSchedule::afterSharedAccess();
     return rv;
   }

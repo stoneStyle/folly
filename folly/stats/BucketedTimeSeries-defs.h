@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -35,7 +35,7 @@ BucketedTimeSeries<VT, TT>::BucketedTimeSeries(size_t nBuckets,
     //
     // There is no point in having more buckets than our timestamp
     // granularity: otherwise we would have buckets that could never be used.
-    if (nBuckets > duration_.count()) {
+    if (nBuckets > size_t(duration_.count())) {
       nBuckets = duration_.count();
     }
 

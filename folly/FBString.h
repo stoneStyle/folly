@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -2318,19 +2318,19 @@ std::basic_istream<
   auto err = __ios_base::goodbit;
   if (sentry) {
     auto n = is.width();
-    if (n == 0) {
+    if (n <= 0) {
       n = str.max_size();
     }
     str.erase();
-    auto got = is.rdbuf()->sgetc();
-    for (; extracted != n && got != T::eof() && !isspace(got); ++extracted) {
-      // Whew. We get to store this guy
+    for (auto got = is.rdbuf()->sgetc(); extracted != size_t(n); ++extracted) {
+      if (got == T::eof()) {
+        err |= __ios_base::eofbit;
+        is.width(0);
+        break;
+      }
+      if (isspace(got)) break;
       str.push_back(got);
       got = is.rdbuf()->snextc();
-    }
-    if (got == T::eof()) {
-      err |= __ios_base::eofbit;
-      is.width(0);
     }
   }
   if (!extracted) {

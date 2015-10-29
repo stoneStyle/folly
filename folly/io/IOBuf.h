@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -1040,6 +1040,29 @@ class IOBuf {
    * chain.
    */
   folly::fbvector<struct iovec> getIov() const;
+
+  /**
+   * Update an existing iovec array with the IOBuf data.
+   *
+   * New iovecs will be appended to the existing vector; anything already
+   * present in the vector will be left unchanged.
+   *
+   * Naturally, the returned iovec data will be invalid if you modify the
+   * buffer chain.
+   */
+  void appendToIov(folly::fbvector<struct iovec>* iov) const;
+
+  /**
+   * Fill an iovec array with the IOBuf data.
+   *
+   * Returns the number of iovec filled. If there are more buffer than
+   * iovec, returns 0. This version is suitable to use with stack iovec
+   * arrays.
+   *
+   * Naturally, the filled iovec data will be invalid if you modify the
+   * buffer chain.
+   */
+  size_t fillIov(struct iovec* iov, size_t len) const;
 
   /*
    * Overridden operator new and delete.

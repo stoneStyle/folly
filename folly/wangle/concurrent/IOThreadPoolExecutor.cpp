@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,6 @@
 
 #include <folly/MoveWrapper.h>
 #include <glog/logging.h>
-#include <folly/io/async/EventBaseManager.h>
 
 #include <folly/detail/MemoryIdler.h>
 
@@ -65,9 +64,11 @@ class MemoryIdlerTimeout
 
 IOThreadPoolExecutor::IOThreadPoolExecutor(
     size_t numThreads,
-    std::shared_ptr<ThreadFactory> threadFactory)
+    std::shared_ptr<ThreadFactory> threadFactory,
+    EventBaseManager* ebm)
   : ThreadPoolExecutor(numThreads, std::move(threadFactory)),
-    nextThread_(0) {
+    nextThread_(0),
+    eventBaseManager_(ebm) {
   addThreads(numThreads);
   CHECK(threadList_.get().size() == numThreads);
 }
@@ -117,6 +118,21 @@ EventBase* IOThreadPoolExecutor::getEventBase() {
   return pickThread()->eventBase;
 }
 
+EventBase* IOThreadPoolExecutor::getEventBase(
+    ThreadPoolExecutor::ThreadHandle* h) {
+  auto thread = dynamic_cast<IOThread*>(h);
+
+  if (thread) {
+    return thread->eventBase;
+  }
+
+  return nullptr;
+}
+
+EventBaseManager* IOThreadPoolExecutor::getEventBaseManager() {
+  return eventBaseManager_;
+}
+
 std::shared_ptr<ThreadPoolExecutor::Thread>
 IOThreadPoolExecutor::makeThread() {
   return std::make_shared<IOThread>(this);
@@ -124,8 +140,7 @@ IOThreadPoolExecutor::makeThread() {
 
 void IOThreadPoolExecutor::threadRun(ThreadPtr thread) {
   const auto ioThread = std::static_pointer_cast<IOThread>(thread);
-  ioThread->eventBase =
-    folly::EventBaseManager::get()->getEventBase();
+  ioThread->eventBase = eventBaseManager_->getEventBase();
   thisThread_.reset(new std::shared_ptr<IOThread>(ioThread));
 
   auto idler = new MemoryIdlerTimeout(ioThread->eventBase);
@@ -148,19 +163,12 @@ void IOThreadPoolExecutor::stopThreads(size_t n) {
   for (size_t i = 0; i < n; i++) {
     const auto ioThread = std::static_pointer_cast<IOThread>(
         threadList_.get()[i]);
+    for (auto& o : observers_) {
+      o->threadStopped(ioThread.get());
+    }
     ioThread->shouldRun = false;
     ioThread->eventBase->terminateLoopSoon();
   }
-}
-
-std::vector<EventBase*> IOThreadPoolExecutor::getEventBases() {
-  std::vector<EventBase*> bases;
-  RWSpinLock::ReadHolder{&threadListLock_};
-  for (const auto& thread : threadList_.get()) {
-    auto ioThread = std::static_pointer_cast<IOThread>(thread);
-    bases.push_back(ioThread->eventBase);
-  }
-  return bases;
 }
 
 // threadListLock_ is readlocked

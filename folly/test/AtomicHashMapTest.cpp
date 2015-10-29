@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -606,7 +606,7 @@ void* atomicHashArrayInsertRaceThread(void* j) {
 }
 TEST(Ahm, atomic_hash_array_insert_race) {
   AHA* arr = atomicHashArrayInsertRaceArray.get();
-  int numIterations = 50000, FLAGS_numThreads = 4;
+  int numIterations = 5000, FLAGS_numThreads = 4;
   void* statuses[FLAGS_numThreads];
   for (int i = 0; i < numIterations; i++) {
     arr->clear();

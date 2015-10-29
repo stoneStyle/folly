@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -85,13 +85,44 @@ class ThreadPoolExecutor : public virtual Executor {
     return taskStatsSubject_->subscribe(observer);
   }
 
+  /**
+   * Base class for threads created with ThreadPoolExecutor.
+   * Some subclasses have methods that operate on these
+   * handles.
+   */
+  class ThreadHandle {
+   public:
+    virtual ~ThreadHandle() = default;
+  };
+
+  /**
+   * Observer interface for thread start/stop.
+   * Provides hooks so actions can be taken when
+   * threads are created
+   */
+  class Observer {
+   public:
+    virtual void threadStarted(ThreadHandle*) = 0;
+    virtual void threadStopped(ThreadHandle*) = 0;
+    virtual void threadPreviouslyStarted(ThreadHandle* h) {
+      threadStarted(h);
+    }
+    virtual void threadNotYetStopped(ThreadHandle* h) {
+      threadStopped(h);
+    }
+    virtual ~Observer() = default;
+  };
+
+  void addObserver(std::shared_ptr<Observer>);
+  void removeObserver(std::shared_ptr<Observer>);
+
  protected:
   // Prerequisite: threadListLock_ writelocked
   void addThreads(size_t n);
   // Prerequisite: threadListLock_ writelocked
   void removeThreads(size_t n, bool isJoin);
 
-  struct FOLLY_ALIGN_TO_AVOID_FALSE_SHARING Thread {
+  struct FOLLY_ALIGN_TO_AVOID_FALSE_SHARING Thread : public ThreadHandle {
     explicit Thread(ThreadPoolExecutor* pool)
       : id(nextId++),
         handle(),
@@ -143,12 +174,24 @@ class ThreadPoolExecutor : public virtual Executor {
   class ThreadList {
    public:
     void add(const ThreadPtr& state) {
-      auto it = std::lower_bound(vec_.begin(), vec_.end(), state, compare);
+      auto it = std::lower_bound(vec_.begin(), vec_.end(), state,
+          // compare method is a static method of class
+          // and therefore cannot be inlined by compiler
+          // as a template predicate of the STL algorithm
+          // but wrapped up with the lambda function (lambda will be inlined)
+          // compiler can inline compare method as well
+          [&](const ThreadPtr& ts1, const ThreadPtr& ts2) -> bool { // inline
+            return compare(ts1, ts2);
+          });
       vec_.insert(it, state);
     }
 
     void remove(const ThreadPtr& state) {
-      auto itPair = std::equal_range(vec_.begin(), vec_.end(), state, compare);
+      auto itPair = std::equal_range(vec_.begin(), vec_.end(), state,
+          // the same as above
+          [&](const ThreadPtr& ts1, const ThreadPtr& ts2) -> bool { // inline
+            return compare(ts1, ts2);
+          });
       CHECK(itPair.first != vec_.end());
       CHECK(std::next(itPair.first) == itPair.second);
       vec_.erase(itPair.first);
@@ -185,6 +228,7 @@ class ThreadPoolExecutor : public virtual Executor {
   std::atomic<bool> isJoin_; // whether the current downsizing is a join
 
   std::shared_ptr<Subject<TaskStats>> taskStatsSubject_;
+  std::vector<std::shared_ptr<Observer>> observers_;
 };
 
 }} // folly::wangle

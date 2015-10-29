@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
  */
 
 #pragma once
-#include <folly/wangle/futures/Future.h>
+#include <folly/futures/Future.h>
 
 namespace folly { namespace wangle {
 
@@ -46,7 +46,7 @@ class FutureExecutor : public ExecutorImpl {
     auto moveFunc = folly::makeMoveWrapper(std::move(func));
     ExecutorImpl::add([movePromise, moveFunc] () mutable {
       (*moveFunc)().then([movePromise] (Try<T>&& t) mutable {
-        movePromise->fulfilTry(std::move(t));
+        movePromise->setTry(std::move(t));
       });
     });
     return future;
@@ -70,7 +70,7 @@ class FutureExecutor : public ExecutorImpl {
     auto movePromise = folly::makeMoveWrapper(std::move(promise));
     auto moveFunc = folly::makeMoveWrapper(std::move(func));
     ExecutorImpl::add([movePromise, moveFunc] () mutable {
-      movePromise->fulfil(std::move(*moveFunc));
+      movePromise->setWith(std::move(*moveFunc));
     });
     return future;
   }

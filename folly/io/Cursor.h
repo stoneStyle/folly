@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -106,6 +106,30 @@ class CursorBase {
     CursorBase end(buffer_->prev());
     end.offset_ = end.buffer_->length();
     return end - *this;
+  }
+
+  /*
+   * Return true if the cursor is at the end of the entire IOBuf chain.
+   */
+  bool isAtEnd() const {
+    // Check for the simple cases first.
+    if (offset_ != crtBuf_->length()) {
+      return false;
+    }
+    if (crtBuf_ == buffer_->prev()) {
+      return true;
+    }
+    // We are at the end of a buffer, but it isn't the last buffer.
+    // We might still be at the end if the remaining buffers in the chain are
+    // empty.
+    const IOBuf* buf = crtBuf_->next();;
+    while (buf != buffer_) {
+      if (buf->length() > 0) {
+        return false;
+      }
+      buf = buf->next();
+    }
+    return true;
   }
 
   Derived& operator+=(size_t offset) {

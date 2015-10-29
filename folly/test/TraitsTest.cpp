@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -108,14 +108,6 @@ TEST(Traits, relational) {
   EXPECT_TRUE( (folly::greater_than<uint8_t, 0u,   uint8_t>(254u)));
   EXPECT_FALSE((folly::greater_than<uint8_t, 255u, uint8_t>(255u)));
   EXPECT_FALSE((folly::greater_than<uint8_t, 255u, uint8_t>(254u)));
-}
-
-struct CompleteType {};
-struct IncompleteType;
-TEST(Traits, is_complete) {
-  EXPECT_TRUE((folly::is_complete<int>::value));
-  EXPECT_TRUE((folly::is_complete<CompleteType>::value));
-  EXPECT_FALSE((folly::is_complete<IncompleteType>::value));
 }
 
 int main(int argc, char ** argv) {

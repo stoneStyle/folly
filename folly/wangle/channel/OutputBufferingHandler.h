@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/wangle/channel/ChannelHandler.h>
+#include <folly/wangle/channel/Handler.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
 #include <folly/io/IOBuf.h>
@@ -27,8 +27,10 @@ namespace folly { namespace wangle {
 /*
  * OutputBufferingHandler buffers writes in order to minimize syscalls. The
  * transport will be written to once per event loop instead of on every write.
+ *
+ * This handler may only be used in a single Pipeline.
  */
-class OutputBufferingHandler : public BytesToBytesHandler,
+class OutputBufferingHandler : public OutboundBytesToBytesHandler,
                                protected EventBase::LoopCallback {
  public:
   Future<void> write(Context* ctx, std::unique_ptr<IOBuf> buf) override {
@@ -36,7 +38,6 @@ class OutputBufferingHandler : public BytesToBytesHandler,
     if (!queueSends_) {
       return ctx->fireWrite(std::move(buf));
     } else {
-      ctx_ = ctx;
       // Delay sends to optimize for fewer syscalls
       if (!sends_) {
         DCHECK(!isLoopCallbackScheduled());
@@ -56,24 +57,33 @@ class OutputBufferingHandler : public BytesToBytesHandler,
 
   void runLoopCallback() noexcept override {
     MoveWrapper<std::vector<Promise<void>>> promises(std::move(promises_));
-    ctx_->fireWrite(std::move(sends_)).then([promises](Try<void>&& t) mutable {
-      try {
-        t.throwIfFailed();
+    getContext()->fireWrite(std::move(sends_))
+      .then([promises](Try<void> t) mutable {
         for (auto& p : *promises) {
-          p.setValue();
+          p.setTry(t);
         }
-      } catch (...) {
-        for (auto& p : *promises) {
-          p.setException(std::current_exception());
-        }
-      }
-    });
+      });
+  }
+
+  Future<void> close(Context* ctx) override {
+    if (isLoopCallbackScheduled()) {
+      cancelLoopCallback();
+    }
+
+    // If there are sends queued, cancel them
+    for (auto& promise : promises_) {
+      promise.setException(
+        folly::make_exception_wrapper<std::runtime_error>(
+          "close() called while sends still pending"));
+    }
+    sends_.reset();
+    promises_.clear();
+    return ctx->fireClose();
   }
 
   std::vector<Promise<void>> promises_;
   std::unique_ptr<IOBuf> sends_{nullptr};
   bool queueSends_{true};
-  Context* ctx_;
 };
 
 }}

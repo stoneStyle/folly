@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -550,6 +550,22 @@ public:
     if (it == end() || !key_comp()(key, it->first))
       return it;
     return end();
+  }
+
+  mapped_type& at(const key_type& key) {
+    iterator it = find(key);
+    if (it != end()) {
+      return it->second;
+    }
+    throw std::out_of_range("sorted_vector_map::at");
+  }
+
+  const mapped_type& at(const key_type& key) const {
+    const_iterator it = find(key);
+    if (it != end()) {
+      return it->second;
+    }
+    throw std::out_of_range("sorted_vector_map::at");
   }
 
   size_type count(const key_type& key) const {

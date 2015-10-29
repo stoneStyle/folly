@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -280,7 +280,7 @@ class Histogram {
 
   /* Remove all data points from the histogram */
   void clear() {
-    for (int i = 0; i < buckets_.getNumBuckets(); i++) {
+    for (unsigned int i = 0; i < buckets_.getNumBuckets(); i++) {
       buckets_.getByIndex(i).clear();
     }
   }
@@ -296,7 +296,7 @@ class Histogram {
       throw std::invalid_argument("Cannot subtract input histogram.");
     }
 
-    for (int i = 0; i < buckets_.getNumBuckets(); i++) {
+    for (unsigned int i = 0; i < buckets_.getNumBuckets(); i++) {
       buckets_.getByIndex(i) -= hist.buckets_.getByIndex(i);
     }
   }
@@ -312,7 +312,7 @@ class Histogram {
       throw std::invalid_argument("Cannot merge from input histogram.");
     }
 
-    for (int i = 0; i < buckets_.getNumBuckets(); i++) {
+    for (unsigned int i = 0; i < buckets_.getNumBuckets(); i++) {
       buckets_.getByIndex(i) += hist.buckets_.getByIndex(i);
     }
   }
@@ -327,7 +327,7 @@ class Histogram {
       throw std::invalid_argument("Cannot copy from input histogram.");
     }
 
-    for (int i = 0; i < buckets_.getNumBuckets(); i++) {
+    for (unsigned int i = 0; i < buckets_.getNumBuckets(); i++) {
       buckets_.getByIndex(i) = hist.buckets_.getByIndex(i);
     }
   }

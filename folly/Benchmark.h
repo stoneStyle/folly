@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,6 +17,7 @@
 #ifndef FOLLY_BENCHMARK_H_
 #define FOLLY_BENCHMARK_H_
 
+#include <folly/ScopeGuard.h>
 #include <folly/Portability.h>
 #include <folly/Preprocessor.h> // for FB_ANONYMOUS_VARIABLE
 #include <cassert>
@@ -26,6 +27,7 @@
 #include <glog/logging.h>
 #include <gflags/gflags.h>
 #include <limits>
+#include <type_traits>
 
 DECLARE_bool(benchmark);
 
@@ -147,6 +149,13 @@ struct BenchmarkSuspender {
   void rehire() {
     assert(start.tv_nsec == 0 || start.tv_sec == 0);
     CHECK_EQ(0, clock_gettime(detail::DEFAULT_CLOCK_ID, &start));
+  }
+
+  template <class F>
+  auto dismissing(F f) -> typename std::result_of<F()>::type {
+    SCOPE_EXIT { rehire(); };
+    dismiss();
+    return f();
   }
 
   /**
@@ -284,11 +293,11 @@ void doNotOptimizeAway(T&& datum) {
   static unsigned funName(paramType paramName)
 
 /**
- * Introduces a benchmark function. Use with either one one or two
- * arguments. The first is the name of the benchmark. Use something
- * descriptive, such as insertVectorBegin. The second argument may be
- * missing, or could be a symbolic counter. The counter dictates how
- * many internal iteration the benchmark does. Example:
+ * Introduces a benchmark function. Use with either one or two arguments.
+ * The first is the name of the benchmark. Use something descriptive, such
+ * as insertVectorBegin. The second argument may be missing, or could be a
+ * symbolic counter. The counter dictates how many internal iteration the
+ * benchmark does. Example:
  *
  * BENCHMARK(vectorPushBack) {
  *   vector<int> v;

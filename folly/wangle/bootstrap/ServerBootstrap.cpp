@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -15,40 +15,48 @@
  */
 #include <folly/wangle/bootstrap/ServerBootstrap.h>
 #include <folly/wangle/concurrent/NamedThreadFactory.h>
+#include <folly/wangle/channel/Handler.h>
 #include <folly/io/async/EventBaseManager.h>
 
 namespace folly {
 
-std::thread ServerWorkerFactory::newThread(
-    folly::Func&& func) {
-  auto id = nextWorkerId_++;
-  auto worker = acceptorFactory_->newAcceptor();
-  {
-    folly::RWSpinLock::WriteHolder guard(workersLock_);
-    workers_.insert({id, worker});
+void ServerWorkerPool::threadStarted(
+  folly::wangle::ThreadPoolExecutor::ThreadHandle* h) {
+  auto worker = acceptorFactory_->newAcceptor(exec_->getEventBase(h));
+  workers_.insert({h, worker});
+
+  for(auto socket : *sockets_) {
+    socket->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this, worker, socket](){
+        socketFactory_->addAcceptCB(
+          socket, worker.get(), worker->getEventBase());
+    });
   }
-  return internalFactory_->newThread([=](){
-    EventBaseManager::get()->setEventBase(worker->getEventBase(), false);
-    func();
-    EventBaseManager::get()->clearEventBase();
-
-    worker->drainAllConnections();
-    {
-      folly::RWSpinLock::WriteHolder guard(workersLock_);
-      workers_.erase(id);
-    }
-  });
 }
 
-void ServerWorkerFactory::setInternalFactory(
-  std::shared_ptr<wangle::NamedThreadFactory> internalFactory) {
-  CHECK(workers_.empty());
-  internalFactory_ = internalFactory;
-}
+void ServerWorkerPool::threadStopped(
+  folly::wangle::ThreadPoolExecutor::ThreadHandle* h) {
+  auto worker = workers_.find(h);
+  CHECK(worker != workers_.end());
 
-void ServerWorkerFactory::setNamePrefix(folly::StringPiece prefix) {
-  CHECK(workers_.empty());
-  internalFactory_->setNamePrefix(prefix);
+  for (auto socket : *sockets_) {
+    socket->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [&]() {
+        socketFactory_->removeAcceptCB(
+          socket, worker->second.get(), nullptr);
+    });
+  }
+
+  if (!worker->second->getEventBase()->isInEventBaseThread()) {
+    worker->second->getEventBase()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [=]() {
+        worker->second->dropAllConnections();
+      });
+  } else {
+    worker->second->dropAllConnections();
+  }
+
+  workers_.erase(worker);
 }
 
 } // namespace

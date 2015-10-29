@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -29,6 +29,8 @@
 #include <cstring>
 #include <cstdlib>
 #include <ctime>
+
+#include <gtest/gtest.h>
 
 using namespace ::folly::hash;
 
@@ -522,16 +524,15 @@ void TestPieces()
 }
 #undef BUFSIZE
 
-int main(int argc, const char **argv)
-{
+TEST(SpookyHashV2, Main) {
     TestResults();
     TestAlignment();
     TestPieces();
-    DoTimingBig(argc);
+    DoTimingBig(1);
     // tudorb@fb.com: Commented out slow tests
 #if 0
     DoTimingSmall(argc);
     TestDeltas(argc);
 #endif
-    return failed;
+    CHECK_EQ(failed, 0);
 }

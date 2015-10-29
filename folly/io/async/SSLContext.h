@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -30,6 +30,10 @@
 #include <netinet/in.h>
 
 #include <glog/logging.h>
+
+#ifndef FOLLY_NO_CONFIG
+#include <folly/folly-config.h>
+#endif
 
 namespace folly {
 
@@ -326,6 +330,11 @@ class SSLContext {
    */
   void unsetNextProtocols();
   void deleteNextProtocolsStrings();
+
+#if defined(SSL_MODE_HANDSHAKE_CUTTHROUGH) && \
+  FOLLY_SSLCONTEXT_USE_TLS_FALSE_START
+  bool canUseFalseStartWithCipher(const SSL_CIPHER *cipher);
+#endif
 #endif // OPENSSL_NPN_NEGOTIATED
 
   /**
@@ -395,6 +404,13 @@ class SSLContext {
   static void cleanupOpenSSL();
 
   /**
+   * Mark openssl as initialized without actually performing any initialization.
+   * Please use this only if you are using a library which requires that it must
+   * make its own calls to SSL_library_init() and related functions.
+   */
+  static void markInitialized();
+
+  /**
    * Default randomize method.
    */
   static void randomize();
@@ -416,10 +432,6 @@ class SSLContext {
   static std::mutex mutex_;
   static bool initialized_;
 
-#ifndef SSLCONTEXT_NO_REFCOUNT
-  static uint64_t count_;
-#endif
-
 #ifdef OPENSSL_NPN_NEGOTIATED
   /**
    * Wire-format list of advertised protocols for use in NPN.
@@ -432,6 +444,29 @@ class SSLContext {
   static int selectNextProtocolCallback(
     SSL* ssl, unsigned char **out, unsigned char *outlen,
     const unsigned char *server, unsigned int server_len, void *args);
+
+#if defined(SSL_MODE_HANDSHAKE_CUTTHROUGH) && \
+  FOLLY_SSLCONTEXT_USE_TLS_FALSE_START
+  // This class contains all allowed ciphers for SSL false start. Call its
+  // `canUseFalseStartWithCipher` to check for cipher qualification.
+  class SSLFalseStartChecker {
+   public:
+    SSLFalseStartChecker();
+
+    bool canUseFalseStartWithCipher(const SSL_CIPHER *cipher);
+
+   private:
+    static int compare_ulong(const void *x, const void *y);
+
+    // All ciphers that are allowed to use false start.
+    unsigned long ciphers_[47];
+    unsigned int length_;
+    unsigned int width_;
+  };
+
+  SSLFalseStartChecker falseStartChecker_;
+#endif
+
 #endif // OPENSSL_NPN_NEGOTIATED
 
   static int passwordCallback(char* password, int size, int, void* data);

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <folly/wangle/channel/ChannelHandler.h>
+#include <folly/wangle/channel/Handler.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/EventBaseManager.h>
@@ -25,6 +25,7 @@
 
 namespace folly { namespace wangle {
 
+// This handler may only be used in a single Pipeline
 class AsyncSocketHandler
   : public folly::wangle::BytesToBytesHandler,
     public AsyncSocket::ReadCallback {
@@ -65,20 +66,19 @@ class AsyncSocketHandler
   }
 
   void attachPipeline(Context* ctx) override {
-    CHECK(!ctx_);
-    ctx_ = ctx;
+    attachReadCallback();
   }
 
-  folly::wangle::Future<void> write(
+  folly::Future<void> write(
       Context* ctx,
       std::unique_ptr<folly::IOBuf> buf) override {
     if (UNLIKELY(!buf)) {
-      return folly::wangle::makeFuture();
+      return folly::makeFuture();
     }
 
     if (!socket_->good()) {
       VLOG(5) << "socket is closed in write()";
-      return folly::wangle::makeFuture<void>(AsyncSocketException(
+      return folly::makeFuture<void>(AsyncSocketException(
           AsyncSocketException::AsyncSocketExceptionType::NOT_OPEN,
           "socket is closed in write()"));
     }
@@ -89,12 +89,13 @@ class AsyncSocketHandler
     return future;
   };
 
-  folly::wangle::Future<void> close(Context* ctx) {
+  folly::Future<void> close(Context* ctx) override {
     if (socket_) {
       detachReadCallback();
       socket_->closeNow();
     }
-    return folly::wangle::makeFuture();
+    ctx->getPipeline()->deletePipeline();
+    return folly::makeFuture();
   }
 
   // Must override to avoid warnings about hidden overloaded virtual due to
@@ -104,7 +105,7 @@ class AsyncSocketHandler
   }
 
   void getReadBuffer(void** bufReturn, size_t* lenReturn) override {
-    const auto readBufferSettings = ctx_->getReadBufferSettings();
+    const auto readBufferSettings = getContext()->getReadBufferSettings();
     const auto ret = bufQueue_.preallocate(
         readBufferSettings.first,
         readBufferSettings.second);
@@ -114,16 +115,17 @@ class AsyncSocketHandler
 
   void readDataAvailable(size_t len) noexcept override {
     bufQueue_.postallocate(len);
-    ctx_->fireRead(bufQueue_);
+    getContext()->fireRead(bufQueue_);
   }
 
   void readEOF() noexcept override {
-    ctx_->fireReadEOF();
+    getContext()->fireReadEOF();
   }
 
   void readErr(const AsyncSocketException& ex)
     noexcept override {
-    ctx_->fireReadException(make_exception_wrapper<AsyncSocketException>(ex));
+    getContext()->fireReadException(
+        make_exception_wrapper<AsyncSocketException>(ex));
   }
 
  private:
@@ -142,11 +144,10 @@ class AsyncSocketHandler
 
    private:
     friend class AsyncSocketHandler;
-    folly::wangle::Promise<void> promise_;
+    folly::Promise<void> promise_;
   };
 
-  Context* ctx_{nullptr};
-  folly::IOBufQueue bufQueue_;
+  folly::IOBufQueue bufQueue_{folly::IOBufQueue::cacheChainLength()};
   std::shared_ptr<AsyncSocket> socket_{nullptr};
 };
 

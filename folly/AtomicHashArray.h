@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -265,8 +265,8 @@ class AtomicHashArray : boost::noncopyable {
   // reading the value, so be careful of calling size() too frequently.  This
   // increases insertion throughput several times over while keeping the count
   // accurate.
-  ThreadCachedInt<int64_t> numEntries_;  // Successful key inserts
-  ThreadCachedInt<int64_t> numPendingEntries_; // Used by insertInternal
+  ThreadCachedInt<uint64_t> numEntries_;  // Successful key inserts
+  ThreadCachedInt<uint64_t> numPendingEntries_; // Used by insertInternal
   std::atomic<int64_t> isFull_; // Used by insertInternal
   std::atomic<int64_t> numErases_;   // Successful key erases
 

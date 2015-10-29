@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,17 +20,18 @@
 
 #include <folly/io/async/AsyncServerSocket.h>
 
+#include <folly/FileUtil.h>
+#include <folly/SocketAddress.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/io/async/NotificationQueue.h>
-#include <folly/SocketAddress.h>
 
 #include <errno.h>
-#include <string.h>
-#include <unistd.h>
 #include <fcntl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netinet/tcp.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 namespace folly {
 
@@ -115,9 +116,10 @@ void AsyncServerSocket::RemoteAcceptor::messageAvailable(
  */
 class AsyncServerSocket::BackoffTimeout : public AsyncTimeout {
  public:
+  // Disallow copy, move, and default constructors.
+  BackoffTimeout(BackoffTimeout&&) = delete;
   BackoffTimeout(AsyncServerSocket* socket)
-    : AsyncTimeout(socket->getEventBase()),
-      socket_(socket) {}
+      : AsyncTimeout(socket->getEventBase()), socket_(socket) {}
 
   virtual void timeoutExpired() noexcept {
     socket_->backoffTimeoutExpired();
@@ -185,10 +187,10 @@ int AsyncServerSocket::stopAccepting(int shutdownFlags) {
     if (shutdownSocketSet_) {
       shutdownSocketSet_->close(handler.socket_);
     } else if (shutdownFlags >= 0) {
-      result = ::shutdown(handler.socket_, shutdownFlags);
+      result = shutdownNoInt(handler.socket_, shutdownFlags);
       pendingCloseSockets_.push_back(handler.socket_);
     } else {
-      ::close(handler.socket_);
+      closeNoInt(handler.socket_);
     }
   }
   sockets_.clear();
@@ -216,8 +218,8 @@ int AsyncServerSocket::stopAccepting(int shutdownFlags) {
 
 void AsyncServerSocket::destroy() {
   stopAccepting();
-  for (auto s: pendingCloseSockets_) {
-    ::close(s);
+  for (auto s : pendingCloseSockets_) {
+    closeNoInt(s);
   }
   // Then call DelayedDestruction::destroy() to take care of
   // whether or not we need immediate or delayed destruction
@@ -263,8 +265,7 @@ void AsyncServerSocket::useExistingSockets(const std::vector<int>& fds) {
     address.setFromLocalAddress(fd);
 
     setupSocket(fd);
-    sockets_.push_back(
-      ServerEventHandler(eventBase_, fd, this, address.getFamily()));
+    sockets_.emplace_back(eventBase_, fd, this, address.getFamily());
     sockets_.back().changeHandlerFD(fd);
   }
 }
@@ -282,7 +283,7 @@ void AsyncServerSocket::bindSocket(
   sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
   if (::bind(fd, saddr, address.getActualSize()) != 0) {
     if (!isExistingSocket) {
-      ::close(fd);
+      closeNoInt(fd);
     }
     folly::throwSystemError(errno,
         "failed to bind to async server socket: " +
@@ -291,8 +292,7 @@ void AsyncServerSocket::bindSocket(
 
   // If we just created this socket, update the EventHandler and set socket_
   if (!isExistingSocket) {
-    sockets_.push_back(
-      ServerEventHandler(eventBase_, fd, this, address.getFamily()));
+    sockets_.emplace_back(eventBase_, fd, this, address.getFamily());
   }
 }
 
@@ -360,23 +360,20 @@ void AsyncServerSocket::bind(uint16_t port) {
                               "bad getaddrinfo");
   }
 
-  folly::ScopeGuard guard = folly::makeGuard([&]{
-      freeaddrinfo(res0);
-    });
-  DCHECK(&guard);
+  SCOPE_EXIT { freeaddrinfo(res0); };
 
-  for (res = res0; res; res = res->ai_next) {
+  auto setupAddress = [&] (struct addrinfo* res) {
     int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
     // IPv6/IPv4 may not be supported by the kernel
     if (s < 0 && errno == EAFNOSUPPORT) {
-      continue;
+      return;
     }
-    CHECK(s);
+    CHECK_GE(s, 0);
 
     try {
       setupSocket(s);
     } catch (...) {
-      ::close(s);
+      closeNoInt(s);
       throw;
     }
 
@@ -389,8 +386,7 @@ void AsyncServerSocket::bind(uint16_t port) {
     SocketAddress address;
     address.setFromLocalAddress(s);
 
-    sockets_.push_back(
-      ServerEventHandler(eventBase_, s, this, address.getFamily()));
+    sockets_.emplace_back(eventBase_, s, this, address.getFamily());
 
     // Bind to the socket
     if (::bind(s, res->ai_addr, res->ai_addrlen) != 0) {
@@ -398,7 +394,65 @@ void AsyncServerSocket::bind(uint16_t port) {
         errno,
         "failed to bind to async server socket for port");
     }
+  };
+
+  const int kNumTries = 5;
+  for (int tries = 1; true; tries++) {
+    // Prefer AF_INET6 addresses. RFC 3484 mandates that getaddrinfo
+    // should return IPv6 first and then IPv4 addresses, but glibc's
+    // getaddrinfo(nullptr) with AI_PASSIVE returns:
+    // - 0.0.0.0 (IPv4-only)
+    // - :: (IPv6+IPv4) in this order
+    // See: https://sourceware.org/bugzilla/show_bug.cgi?id=9981
+    for (res = res0; res; res = res->ai_next) {
+      if (res->ai_family == AF_INET6) {
+        setupAddress(res);
+      }
+    }
+
+    // If port == 0, then we should try to bind to the same port on ipv4 and
+    // ipv6.  So if we did bind to ipv6, figure out that port and use it,
+    // except for the last attempt when we just use any port available.
+    if (sockets_.size() == 1 && port == 0) {
+      SocketAddress address;
+      address.setFromLocalAddress(sockets_.back().socket_);
+      snprintf(sport, sizeof(sport), "%u", address.getPort());
+      freeaddrinfo(res0);
+      CHECK_EQ(0, getaddrinfo(nullptr, sport, &hints, &res0));
+    }
+
+    try {
+      for (res = res0; res; res = res->ai_next) {
+        if (res->ai_family != AF_INET6) {
+          setupAddress(res);
+        }
+      }
+    } catch (const std::system_error& e) {
+      // if we can't bind to the same port on ipv4 as ipv6 when using port=0
+      // then we will try again another 2 times before giving up.  We do this
+      // by closing the sockets that were opened, then redoing the whole thing
+      if (port == 0 && !sockets_.empty() && tries != kNumTries) {
+        for (const auto& socket : sockets_) {
+          if (socket.socket_ <= 0) {
+            continue;
+          } else if (shutdownSocketSet_) {
+            shutdownSocketSet_->close(socket.socket_);
+          } else {
+            closeNoInt(socket.socket_);
+          }
+        }
+        sockets_.clear();
+        snprintf(sport, sizeof(sport), "%u", port);
+        freeaddrinfo(res0);
+        CHECK_EQ(0, getaddrinfo(nullptr, sport, &hints, &res0));
+        continue;
+      }
+      throw;
+    }
+
+    break;
   }
+
   if (sockets_.size() == 0) {
     throw std::runtime_error(
         "did not bind any async server socket for port");
@@ -419,10 +473,10 @@ void AsyncServerSocket::listen(int backlog) {
 
 void AsyncServerSocket::getAddress(SocketAddress* addressReturn) const {
   CHECK(sockets_.size() >= 1);
-  if (sockets_.size() > 1) {
-    VLOG(2) << "Warning: getAddress can return multiple addresses, " <<
-      "but getAddress was called, so only returning the first";
-  }
+  VLOG_IF(2, sockets_.size() > 1)
+    << "Warning: getAddress() called and multiple addresses available ("
+    << sockets_.size() << "). Returning only the first one.";
+
   addressReturn->setFromLocalAddress(sockets_[0].socket_);
 }
 
@@ -450,7 +504,7 @@ void AsyncServerSocket::addAcceptCallback(AcceptCallback *callback,
     eventBase = eventBase_; // Run in AsyncServerSocket's eventbase
   }
 
-  callbacks_.push_back(CallbackInfo(callback, eventBase));
+  callbacks_.emplace_back(callback, eventBase);
 
   // Start the remote acceptor.
   //
@@ -574,7 +628,7 @@ int AsyncServerSocket::createSocket(int family) {
   try {
     setupSocket(fd);
   } catch (...) {
-    ::close(fd);
+    closeNoInt(fd);
     throw;
   }
   return fd;
@@ -684,7 +738,7 @@ void AsyncServerSocket::handlerReady(
       } else if (rand() > acceptRate_ * RAND_MAX) {
         ++numDroppedConnections_;
         if (clientSocket >= 0) {
-          ::close(clientSocket);
+          closeNoInt(clientSocket);
         }
         continue;
       }
@@ -714,7 +768,7 @@ void AsyncServerSocket::handlerReady(
 #ifndef SOCK_NONBLOCK
     // Explicitly set the new connection to non-blocking mode
     if (fcntl(clientSocket, F_SETFL, O_NONBLOCK) != 0) {
-      ::close(clientSocket);
+      closeNoInt(clientSocket);
       dispatchError("failed to set accepted socket to non-blocking mode",
                     errno);
       return;
@@ -778,7 +832,7 @@ void AsyncServerSocket::dispatchSocket(int socket,
       // even accept new messages.
       LOG(ERROR) << "failed to dispatch newly accepted socket:"
                  << " all accept callback queues are full";
-      ::close(socket);
+      closeNoInt(socket);
       return;
     }
 

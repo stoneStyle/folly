@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,6 +18,7 @@
 #define FOLLY_BASE_STRING_H_
 
 #include <exception>
+#include <stdarg.h>
 #include <string>
 #include <boost/type_traits.hpp>
 
@@ -436,7 +437,9 @@ void splitTo(const Delim& delimiter,
  * Split a string into a fixed number of string pieces and/or numeric types
  * by delimiter. Any numeric type that folly::to<> can convert to from a
  * string piece is supported as a target. Returns 'true' if the fields were
- * all successfully populated.
+ * all successfully populated.  Returns 'false' if there were too few fields
+ * in the input, or too many fields if exact=true.  Casting exceptions will
+ * not be caught.
  *
  * Examples:
  *

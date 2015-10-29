@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,8 +22,11 @@
 
 #include <folly/Portability.h>
 #include <folly/FBString.h>
+#include <folly/SpookyHashV2.h>
+
 #include <algorithm>
 #include <boost/operators.hpp>
+#include <climits>
 #include <cstring>
 #include <glog/logging.h>
 #include <iosfwd>
@@ -183,6 +186,9 @@ public:
   constexpr Range() : b_(), e_() {
   }
 
+  constexpr Range(const Range&) = default;
+  constexpr Range(Range&&) = default;
+
 public:
   // Works for all iterators
   constexpr Range(Iter start, Iter end) : b_(start), e_(end) {
@@ -321,6 +327,9 @@ public:
       e_(other.end()) {
   }
 
+  Range& operator=(const Range& rhs) & = default;
+  Range& operator=(Range&& rhs) & = default;
+
   void clear() {
     b_ = Iter();
     e_ = Iter();
@@ -389,7 +398,13 @@ public:
     const size_type osize = o.size();
     const size_type msize = std::min(tsize, osize);
     int r = traits_type::compare(data(), o.data(), msize);
-    if (r == 0) r = tsize - osize;
+    if (r == 0 && tsize != osize) {
+      // We check the signed bit of the subtraction and bit shift it
+      // to produce either 0 or 2. The subtraction yields the
+      // comparison values of either -1 or 1.
+      r = (static_cast<int>(
+             (osize - tsize) >> (CHAR_BIT * sizeof(size_t) - 1)) << 1) - 1;
+    }
     return r;
   }
 
@@ -413,6 +428,11 @@ public:
     return b_[i];
   }
 
+  // Do NOT use this function, which was left behind for backwards
+  // compatibility.  Use SpookyHashV2 instead -- it is faster, and produces
+  // a 64-bit hash, which means dramatically fewer collisions in large maps.
+  // (The above advice does not apply if you are targeting a 32-bit system.)
+  //
   // Works only for Range<const char*> and Range<char*>
   uint32_t hash() const {
     // Taken from fbi/nstring.h:
@@ -903,6 +923,7 @@ operator>=(const T& lhs, const U& rhs) {
   return StringPiece(lhs) >= StringPiece(rhs);
 }
 
+// Do NOT use this, use SpookyHashV2 instead, see commment on hash() above.
 struct StringPieceHash {
   std::size_t operator()(const StringPiece str) const {
     return static_cast<std::size_t>(str.hash());
@@ -1102,6 +1123,16 @@ inline size_t qfind_first_of(const Range<const unsigned char*>& haystack,
   return detail::qfind_first_byte_of(StringPiece(haystack),
                                      StringPiece(needles));
 }
+
+template<class Key>
+struct hasher;
+
+template <class T> struct hasher<folly::Range<T*>> {
+  size_t operator()(folly::Range<T*> r) const {
+    return hash::SpookyHashV2::Hash64(r.begin(), r.size() * sizeof(T), 0);
+  }
+};
+
 }  // !namespace folly
 
 #pragma GCC diagnostic pop

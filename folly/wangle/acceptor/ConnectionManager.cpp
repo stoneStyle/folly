@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -53,14 +53,15 @@ ConnectionManager::addConnection(ManagedConnection* connection,
     }
   }
   if (timeout) {
-    scheduleTimeout(connection);
+    scheduleTimeout(connection, timeout_);
   }
 }
 
 void
-ConnectionManager::scheduleTimeout(ManagedConnection* connection) {
-  if (timeout_ > std::chrono::milliseconds(0)) {
-    connTimeouts_->scheduleTimeout(connection, timeout_);
+ConnectionManager::scheduleTimeout(ManagedConnection* const connection,
+    std::chrono::milliseconds timeout) {
+  if (timeout > std::chrono::milliseconds(0)) {
+    connTimeouts_->scheduleTimeout(connection, timeout);
   }
 }
 

@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -24,10 +24,10 @@ namespace folly {
 typedef SpinLockMslImpl SpinLock;
 #elif __APPLE__
 typedef SpinLockAppleImpl SpinLock;
-#elif __ANDROID__
-typedef SpinLockPthreadMutexImpl SpinLock;
-#else
+#elif FOLLY_HAVE_PTHREAD_SPINLOCK_T
 typedef SpinLockPthreadImpl SpinLock;
+#else
+typedef SpinLockPthreadMutexImpl SpinLock;
 #endif
 
 template <typename LOCK>

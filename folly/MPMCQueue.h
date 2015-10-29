@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ namespace folly {
 namespace detail {
 
 template<typename T, template<typename> class Atom>
-class SingleElementQueue;
+struct SingleElementQueue;
 
 template <typename T> class MPMCPipelineStageImpl;
 
@@ -45,6 +45,14 @@ template <typename T> class MPMCPipelineStageImpl;
 /// The queue has a fixed capacity, for which all memory will be allocated
 /// up front.  The bulk of the work of enqueuing and dequeuing can be
 /// performed in parallel.
+///
+/// MPMCQueue is linearizable.  That means that if a call to write(A)
+/// returns before a call to write(B) begins, then A will definitely end up
+/// in the queue before B, and if a call to read(X) returns before a call
+/// to read(Y) is started, that X will be something from earlier in the
+/// queue than Y.  This also means that if a read call returns a value, you
+/// can be sure that all previous elements of the queue have been assigned
+/// a reader (that reader might not yet have returned, but it exists).
 ///
 /// The underlying implementation uses a ticket dispenser for the head and
 /// the tail, spreading accesses across N single-element queues to produce
@@ -57,8 +65,7 @@ template <typename T> class MPMCPipelineStageImpl;
 /// when the MPMCQueue's capacity is smaller than the number of enqueuers
 /// or dequeuers).
 ///
-/// NOEXCEPT INTERACTION: Ticket-based queues separate the assignment
-/// of In benchmarks (contained in tao/queues/ConcurrentQueueTests)
+/// In benchmarks (contained in tao/queues/ConcurrentQueueTests)
 /// it handles 1 to 1, 1 to N, N to 1, and N to M thread counts better
 /// than any of the alternatives present in fbcode, for both small (~10)
 /// and large capacities.  In these benchmarks it is also faster than
@@ -67,17 +74,25 @@ template <typename T> class MPMCPipelineStageImpl;
 /// queue because it uses futex() to block and unblock waiting threads,
 /// rather than spinning with sched_yield.
 ///
-/// queue positions from the actual construction of the in-queue elements,
-/// which means that the T constructor used during enqueue must not throw
-/// an exception.  This is enforced at compile time using type traits,
-/// which requires that T be adorned with accurate noexcept information.
-/// If your type does not use noexcept, you will have to wrap it in
-/// something that provides the guarantee.  We provide an alternate
-/// safe implementation for types that don't use noexcept but that are
-/// marked folly::IsRelocatable and boost::has_nothrow_constructor,
-/// which is common for folly types.  In particular, if you can declare
-/// FOLLY_ASSUME_FBVECTOR_COMPATIBLE then your type can be put in
-/// MPMCQueue.
+/// NOEXCEPT INTERACTION: tl;dr; If it compiles you're fine.  Ticket-based
+/// queues separate the assignment of queue positions from the actual
+/// construction of the in-queue elements, which means that the T
+/// constructor used during enqueue must not throw an exception.  This is
+/// enforced at compile time using type traits, which requires that T be
+/// adorned with accurate noexcept information.  If your type does not
+/// use noexcept, you will have to wrap it in something that provides
+/// the guarantee.  We provide an alternate safe implementation for types
+/// that don't use noexcept but that are marked folly::IsRelocatable
+/// and boost::has_nothrow_constructor, which is common for folly types.
+/// In particular, if you can declare FOLLY_ASSUME_FBVECTOR_COMPATIBLE
+/// then your type can be put in MPMCQueue.
+///
+/// If you have a pool of N queue consumers that you want to shut down
+/// after the queue has drained, one way is to enqueue N sentinel values
+/// to the queue.  If the producer doesn't know how many consumers there
+/// are you can enqueue one sentinel and then have each consumer requeue
+/// two sentinels after it receives it (by requeuing 2 the shutdown can
+/// complete in O(log P) time instead of O(P)).
 template<typename T,
          template<typename> class Atom = std::atomic>
 class MPMCQueue : boost::noncopyable {
@@ -92,14 +107,21 @@ class MPMCQueue : boost::noncopyable {
 
   explicit MPMCQueue(size_t queueCapacity)
     : capacity_(queueCapacity)
-    , slots_(new detail::SingleElementQueue<T,Atom>[queueCapacity +
-                                                    2 * kSlotPadding])
-    , stride_(computeStride(queueCapacity))
     , pushTicket_(0)
     , popTicket_(0)
     , pushSpinCutoff_(0)
     , popSpinCutoff_(0)
   {
+    if (queueCapacity == 0)
+      throw std::invalid_argument(
+        "MPMCQueue with explicit capacity 0 is impossible"
+      );
+
+    // would sigfpe if capacity is 0
+    stride_ = computeStride(queueCapacity);
+    slots_ = new detail::SingleElementQueue<T,Atom>[queueCapacity +
+                                                    2 * kSlotPadding];
+
     // ideally this would be a static assert, but g++ doesn't allow it
     assert(alignof(MPMCQueue<T,Atom>)
            >= detail::CacheLocality::kFalseSharingRange);
@@ -274,7 +296,7 @@ class MPMCQueue : boost::noncopyable {
   /// return false, but writeIfNotFull will wait for the dequeue to finish.
   /// This method is required if you are composing queues and managing
   /// your own wakeup, because it guarantees that after every successful
-  /// write a readIfNotFull will succeed.
+  /// write a readIfNotEmpty will succeed.
   template <typename ...Args>
   bool writeIfNotFull(Args&&... args) noexcept {
     uint64_t ticket;
@@ -358,14 +380,15 @@ class MPMCQueue : boost::noncopyable {
   /// This is how many times we will spin before using FUTEX_WAIT when
   /// the queue is full on enqueue, adaptively computed by occasionally
   /// spinning for longer and smoothing with an exponential moving average
-  Atom<int> FOLLY_ALIGN_TO_AVOID_FALSE_SHARING pushSpinCutoff_;
+  Atom<uint32_t> FOLLY_ALIGN_TO_AVOID_FALSE_SHARING pushSpinCutoff_;
 
   /// The adaptive spin cutoff when the queue is empty on dequeue
-  Atom<int> FOLLY_ALIGN_TO_AVOID_FALSE_SHARING popSpinCutoff_;
+  Atom<uint32_t> FOLLY_ALIGN_TO_AVOID_FALSE_SHARING popSpinCutoff_;
 
   /// Alignment doesn't prevent false sharing at the end of the struct,
   /// so fill out the last cache line
-  char padding_[detail::CacheLocality::kFalseSharingRange - sizeof(Atom<int>)];
+  char padding_[detail::CacheLocality::kFalseSharingRange -
+                sizeof(Atom<uint32_t>)];
 
 
   /// We assign tickets in increasing order, but we don't want to
@@ -602,13 +625,13 @@ struct TurnSequencer {
   /// before blocking and will adjust spinCutoff based on the results,
   /// otherwise it will spin for at most spinCutoff spins.
   void waitForTurn(const uint32_t turn,
-                   Atom<int>& spinCutoff,
+                   Atom<uint32_t>& spinCutoff,
                    const bool updateSpinCutoff) noexcept {
-    int prevThresh = spinCutoff.load(std::memory_order_relaxed);
-    const int effectiveSpinCutoff =
+    uint32_t prevThresh = spinCutoff.load(std::memory_order_relaxed);
+    const uint32_t effectiveSpinCutoff =
         updateSpinCutoff || prevThresh == 0 ? kMaxSpins : prevThresh;
-    int tries;
 
+    uint32_t tries;
     const uint32_t sturn = turn << kTurnShift;
     for (tries = 0; ; ++tries) {
       uint32_t state = state_.load(std::memory_order_acquire);
@@ -647,13 +670,14 @@ struct TurnSequencer {
     if (updateSpinCutoff || prevThresh == 0) {
       // if we hit kMaxSpins then spinning was pointless, so the right
       // spinCutoff is kMinSpins
-      int target;
+      uint32_t target;
       if (tries >= kMaxSpins) {
         target = kMinSpins;
       } else {
         // to account for variations, we allow ourself to spin 2*N when
         // we think that N is actually required in order to succeed
-        target = std::min(int{kMaxSpins}, std::max(int{kMinSpins}, tries * 2));
+        target = std::min<uint32_t>(kMaxSpins,
+                                    std::max<uint32_t>(kMinSpins, tries * 2));
       }
 
       if (prevThresh == 0) {
@@ -662,8 +686,9 @@ struct TurnSequencer {
       } else {
         // try once, keep moving if CAS fails.  Exponential moving average
         // with alpha of 7/8
+        // Be careful that the quantity we add to prevThresh is signed.
         spinCutoff.compare_exchange_weak(
-            prevThresh, prevThresh + (target - prevThresh) / 8);
+            prevThresh, prevThresh + int(target - prevThresh) / 8);
       }
     }
   }
@@ -757,9 +782,9 @@ struct SingleElementQueue {
   /// enqueue using in-place noexcept construction
   template <typename ...Args,
             typename = typename std::enable_if<
-                std::is_nothrow_constructible<T,Args...>::value>::type>
+              std::is_nothrow_constructible<T,Args...>::value>::type>
   void enqueue(const uint32_t turn,
-               Atom<int>& spinCutoff,
+               Atom<uint32_t>& spinCutoff,
                const bool updateSpinCutoff,
                Args&&... args) noexcept {
     sequencer_.waitForTurn(turn * 2, spinCutoff, updateSpinCutoff);
@@ -775,22 +800,16 @@ struct SingleElementQueue {
                  boost::has_nothrow_constructor<T>::value) ||
                 std::is_nothrow_constructible<T,T&&>::value>::type>
   void enqueue(const uint32_t turn,
-               Atom<int>& spinCutoff,
+               Atom<uint32_t>& spinCutoff,
                const bool updateSpinCutoff,
                T&& goner) noexcept {
-    if (std::is_nothrow_constructible<T,T&&>::value) {
-      // this is preferred
-      sequencer_.waitForTurn(turn * 2, spinCutoff, updateSpinCutoff);
-      new (&contents_) T(std::move(goner));
-      sequencer_.completeTurn(turn * 2);
-    } else {
-      // simulate nothrow move with relocation, followed by default
-      // construction to fill the gap we created
-      sequencer_.waitForTurn(turn * 2, spinCutoff, updateSpinCutoff);
-      memcpy(&contents_, &goner, sizeof(T));
-      sequencer_.completeTurn(turn * 2);
-      new (&goner) T();
-    }
+    enqueueImpl(
+        turn,
+        spinCutoff,
+        updateSpinCutoff,
+        std::move(goner),
+        typename std::conditional<std::is_nothrow_constructible<T,T&&>::value,
+                                  ImplByMove, ImplByRelocation>::type());
   }
 
   bool mayEnqueue(const uint32_t turn) const noexcept {
@@ -798,27 +817,16 @@ struct SingleElementQueue {
   }
 
   void dequeue(uint32_t turn,
-               Atom<int>& spinCutoff,
+               Atom<uint32_t>& spinCutoff,
                const bool updateSpinCutoff,
                T& elem) noexcept {
-    if (folly::IsRelocatable<T>::value) {
-      // this version is preferred, because we do as much work as possible
-      // before waiting
-      try {
-        elem.~T();
-      } catch (...) {
-        // unlikely, but if we don't complete our turn the queue will die
-      }
-      sequencer_.waitForTurn(turn * 2 + 1, spinCutoff, updateSpinCutoff);
-      memcpy(&elem, &contents_, sizeof(T));
-      sequencer_.completeTurn(turn * 2 + 1);
-    } else {
-      // use nothrow move assignment
-      sequencer_.waitForTurn(turn * 2 + 1, spinCutoff, updateSpinCutoff);
-      elem = std::move(*ptr());
-      destroyContents();
-      sequencer_.completeTurn(turn * 2 + 1);
-    }
+    dequeueImpl(turn,
+                spinCutoff,
+                updateSpinCutoff,
+                elem,
+                typename std::conditional<folly::IsRelocatable<T>::value,
+                                          ImplByRelocation,
+                                          ImplByMove>::type());
   }
 
   bool mayDequeue(const uint32_t turn) const noexcept {
@@ -845,6 +853,63 @@ struct SingleElementQueue {
 #ifndef NDEBUG
     memset(&contents_, 'Q', sizeof(T));
 #endif
+  }
+
+  /// Tag classes for dispatching to enqueue/dequeue implementation.
+  struct ImplByRelocation {};
+  struct ImplByMove {};
+
+  /// enqueue using nothrow move construction.
+  void enqueueImpl(const uint32_t turn,
+                   Atom<uint32_t>& spinCutoff,
+                   const bool updateSpinCutoff,
+                   T&& goner,
+                   ImplByMove) noexcept {
+    sequencer_.waitForTurn(turn * 2, spinCutoff, updateSpinCutoff);
+    new (&contents_) T(std::move(goner));
+    sequencer_.completeTurn(turn * 2);
+  }
+
+  /// enqueue by simulating nothrow move with relocation, followed by
+  /// default construction to a noexcept relocation.
+  void enqueueImpl(const uint32_t turn,
+                   Atom<uint32_t>& spinCutoff,
+                   const bool updateSpinCutoff,
+                   T&& goner,
+                   ImplByRelocation) noexcept {
+    sequencer_.waitForTurn(turn * 2, spinCutoff, updateSpinCutoff);
+    memcpy(&contents_, &goner, sizeof(T));
+    sequencer_.completeTurn(turn * 2);
+    new (&goner) T();
+  }
+
+  /// dequeue by destructing followed by relocation.  This version is preferred,
+  /// because as much work as possible can be done before waiting.
+  void dequeueImpl(uint32_t turn,
+                   Atom<uint32_t>& spinCutoff,
+                   const bool updateSpinCutoff,
+                   T& elem,
+                   ImplByRelocation) noexcept {
+    try {
+      elem.~T();
+    } catch (...) {
+      // unlikely, but if we don't complete our turn the queue will die
+    }
+    sequencer_.waitForTurn(turn * 2 + 1, spinCutoff, updateSpinCutoff);
+    memcpy(&elem, &contents_, sizeof(T));
+    sequencer_.completeTurn(turn * 2 + 1);
+  }
+
+  /// dequeue by nothrow move assignment.
+  void dequeueImpl(uint32_t turn,
+                   Atom<uint32_t>& spinCutoff,
+                   const bool updateSpinCutoff,
+                   T& elem,
+                   ImplByMove) noexcept {
+    sequencer_.waitForTurn(turn * 2 + 1, spinCutoff, updateSpinCutoff);
+    elem = std::move(*ptr());
+    destroyContents();
+    sequencer_.completeTurn(turn * 2 + 1);
   }
 };
 

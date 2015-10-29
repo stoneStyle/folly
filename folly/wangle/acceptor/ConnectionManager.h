@@ -1,5 +1,5 @@
 /*
- * Copyright 2014 Facebook, Inc.
+ * Copyright 2015 Facebook, Inc.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -90,7 +90,8 @@ class ConnectionManager: public folly::DelayedDestruction {
   /**
    * Schedule a timeout callback for a connection.
    */
-  void scheduleTimeout(ManagedConnection* connection);
+  void scheduleTimeout(ManagedConnection* const connection,
+                       std::chrono::milliseconds timeout);
 
   /*
    * Schedule a callback on the wheel timer
@@ -128,6 +129,10 @@ class ConnectionManager: public folly::DelayedDestruction {
       func(&(*it));
       it++;
     }
+  }
+
+  std::chrono::milliseconds getDefaultTimeout() const {
+    return timeout_;
   }
 
  private:
